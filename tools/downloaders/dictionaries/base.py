@@ -33,7 +33,8 @@ STANDARD_SHORT_CODES = {
     "cambridge": "Cam",
     "collins": "Col",
     "dictionary": "Dic",
-    "robert": "Rob"
+    "robert": "Rob",
+    "larousse": "Lar"
 }
 
 # Correspondance inverse pour la recherche par code court

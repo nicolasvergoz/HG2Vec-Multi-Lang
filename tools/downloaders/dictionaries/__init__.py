@@ -13,13 +13,15 @@ from .cambridge import downloader as cambridge_downloader
 from .dictionary_com import downloader as dictionary_downloader
 from .collins import downloader as collins_downloader
 from .robert import downloader as robert_downloader
+from .larousse import downloader as larousse_downloader
 
 # Dictionary mapping short codes to downloaders
 DICTIONARY_DOWNLOADERS = {
     "Cam": cambridge_downloader,
     "Dic": dictionary_downloader, 
     "Col": collins_downloader,
-    "Rob": robert_downloader
+    "Rob": robert_downloader,
+    "Lar": larousse_downloader
 }
 
 # Get downloader instance by short code or name
