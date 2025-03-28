@@ -29,6 +29,7 @@ import argparse
 import time
 import sys
 import os
+import re
 
 # Import the clean_defs function from clean_definitions.py
 from clean_definitions import clean_defs
@@ -206,13 +207,25 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
         
         # Generate iteration-specific filenames
         input_filename = basename(input_file)
-        if pos in ["noun", "verb", "adjective"]:
-            output_fn = join(temp_dir, f"iter{current_iteration}-{splitext(input_filename)[0]}-definitions-{pos}.txt")
+        
+        # Vérifier si le nom de fichier d'entrée a déjà un préfixe d'itération
+        if input_filename.startswith("iter"):
+            # Extraire la partie après le préfixe d'itération
+            match = re.match(r'iter\d+-(.+)', input_filename)
+            if match:
+                base_name = match.group(1)
+            else:
+                base_name = splitext(input_filename)[0]
         else:
-            output_fn = join(temp_dir, f"iter{current_iteration}-{splitext(input_filename)[0]}-definitions.txt")
+            base_name = splitext(input_filename)[0]
+            
+        if pos in ["noun", "verb", "adjective"]:
+            output_fn = join(temp_dir, f"iter{current_iteration}-{base_name}-definitions-{pos}.txt")
+        else:
+            output_fn = join(temp_dir, f"iter{current_iteration}-{base_name}-definitions.txt")
         
         # Create filename for not found words
-        not_found_fn = join(temp_dir, f"iter{current_iteration}-{splitext(input_filename)[0]}-not-found.txt")
+        not_found_fn = join(temp_dir, f"iter{current_iteration}-{base_name}-not-found.txt")
 
         # Create filename for cleaned definitions - sans le préfixe "iter<N>-"
         clean_output_fn = join(temp_dir, f"{splitext(basename(output_fn))[0].replace(f'iter{current_iteration}-', '')}-clean.txt")
@@ -451,7 +464,22 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
             new_vocabulary = (new_vocabulary - all_processed_words)
             
             # Create a temporary file for the new vocabulary
-            next_input_file = join(temp_dir, f"iter{current_iteration+1}-vocabulary.txt")
+            # Remplacer le préfixe d'itération existant au lieu de l'ajouter
+            base_filename = basename(input_file)
+            # Vérifier si le nom de fichier a déjà un préfixe d'itération
+            if base_filename.startswith(f"iter"):
+                # Extraire la partie après le préfixe d'itération (après "iter<n>-")
+                match = re.match(r'iter\d+-(.+)', base_filename)
+                if match:
+                    base_name = match.group(1)
+                    next_input_file = join(temp_dir, f"iter{current_iteration+1}-{base_name}")
+                else:
+                    # Fallback si le pattern ne correspond pas
+                    next_input_file = join(temp_dir, f"iter{current_iteration+1}-vocabulary.txt")
+            else:
+                # Pas de préfixe d'itération, ajouter le nouveau
+                next_input_file = join(temp_dir, f"iter{current_iteration+1}-{base_filename}")
+            
             with open(next_input_file, 'w') as f:
                 for word in new_vocabulary:
                     f.write(f"{word}\n")
