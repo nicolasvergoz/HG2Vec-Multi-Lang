@@ -146,3 +146,35 @@ Dictionary downloaders should return a tuple with three elements:
   - `definitions`: A list of definitions if found, or None if not found
   - `url`: The URL consulted (for error reporting) or None
   - `error_msg`: Error message if there was an error, or None 
+
+# Extracting Vocabulary from Definitions
+
+Once you have downloaded definitions, you can extract a vocabulary list (unique words) using the `extract_vocabulary.py` script:
+
+```bash
+python tools/downloaders/extract_vocabulary.py data/output/definitions/your_words-definitions.txt
+```
+
+### Command Line Arguments
+
+- `input_file`: Path to the definitions file to process
+- `--output-dir`: Optional custom directory to save the vocabulary file (default: 'data/temp/vocabulary/')
+
+### Output
+
+The script will:
+- Extract all unique words from the definitions file
+- Convert words to lowercase for better deduplication
+- Sort words alphabetically
+- Save the vocabulary as a text file with one word per line
+
+### Using as a Module
+
+You can also import and use the extract_vocabulary function in your own Python scripts:
+
+```python
+from tools.downloaders.extract_vocabulary import extract_vocabulary
+
+# Extract vocabulary and get the path to the output file
+output_file = extract_vocabulary('path/to/definitions_file.txt')
+```

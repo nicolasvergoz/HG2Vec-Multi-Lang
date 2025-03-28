@@ -83,3 +83,4 @@ dmypy.json
 data/output/*
 data/temp/*
 *.vec
+wiktionary_fr.jsonl

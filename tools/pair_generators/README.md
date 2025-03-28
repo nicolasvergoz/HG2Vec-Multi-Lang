@@ -2,9 +2,9 @@
 
 This directory contains tools for generating word pairs based on dictionary definitions and word embeddings.
 
-## Generate Pairs
+# Generate Strong/Weak Pairs
 
-The `generate_pairs.py` script generates strong and weak pairs of words based on their definitions. The script requires a file containing word definitions and optionally pre-trained word embeddings.
+The `generate_weak_strong_pairs.py` script generates strong and weak pairs of words based on their definitions. The script requires a file containing word definitions and optionally pre-trained word embeddings.
 
 ### Strong and Weak Pairs
 
@@ -23,7 +23,7 @@ If you specify `K>0` but don't provide an embedding file, the script will automa
 ### Usage
 
 ```bash
-python generate_pairs.py -d <definitions_file> [-e <embeddings_file>] [-sf <strong_file>] [-wf <weak_file>] [-K <num>]
+python generate_weak_strong_pairs.py -d <definitions_file> [-e <embeddings_file>] [-sf <strong_file>] [-wf <weak_file>] [-K <num>]
 ```
 
 #### Parameters
@@ -38,7 +38,7 @@ python generate_pairs.py -d <definitions_file> [-e <embeddings_file>] [-sf <stro
 
 ```bash
 # Generate natural and artificial strong pairs (K=5)
-python tools/pair_generators/generate_pairs.py \
+python tools/pair_generators/generate_weak_strong_pairs.py \
   -d data/input/definitions.txt \
   -e data/input/wiki.fr.vec \
   -sf data/output/pairs/strong-pairs \
@@ -46,7 +46,7 @@ python tools/pair_generators/generate_pairs.py \
   -K 5
 
 # Generate only natural strong pairs (no artificial pairs)
-python tools/pair_generators/generate_pairs.py \
+python tools/pair_generators/generate_weak_strong_pairs.py \
   -d data/input/definitions.txt \
   -sf data/output/pairs/strong-pairs \
   -wf data/output/pairs/weak-pairs \
@@ -103,4 +103,48 @@ If you use the FastText word vectors, please cite:
   issn={2307-387X},
   pages={135--146}
 }
-``` 
+```
+
+# Generate Synonym and Antonym Pairs
+
+The `generate_syn_ant_pairs.py` script generates synonym and antonym pairs based on Wiktionary data. It takes a vocabulary list and a Wiktionary JSONL file as input, and extracts synonym and antonym relationships.
+
+### Features
+
+- Processes vocabulary list (one word per line) against Wiktionary data
+- Extracts synonyms, hyponyms, and forms for each word as synonyms
+- Extracts antonyms for each word
+- Filters out multi-word expressions, single-character words, and emojis/special characters
+- Outputs synonym and antonym pairs to separate files
+
+### Data Source
+
+Wiktionary data in JSONL format can be found at [Kaikki.org](https://kaikki.org/):
+- French Wiktionary: [https://kaikki.org/frwiktionary/Français/index.html](https://kaikki.org/frwiktionary/Français/index.html)
+- Data is also available for many other language editions
+
+### Usage
+
+```bash
+python generate_syn_ant_pairs.py -v <vocabulary_file> -w <wiktionary_jsonl_file>
+```
+
+#### Parameters
+
+- `-v, --vocabulary`: File containing vocabulary words, one per line (required)
+- `-w, --wiktionary`: JSONL file containing Wiktionary extracts (required)
+
+#### Example
+
+```bash
+# Generate synonym and antonym pairs
+python tools/pair_generators/generate_syn_ant_pairs.py \
+  -v data/input/test_syn_ant_fr.txt \
+  -w data/input/sample.jsonl
+```
+
+### Output
+
+The script generates two files in the `data/output/pairs/` directory:
+- `syn-pairs.txt`: Contains all synonym pairs of words (tab-separated)
+- `ant-pairs.txt`: Contains all antonym pairs of words (tab-separated)
