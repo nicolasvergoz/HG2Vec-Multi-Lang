@@ -30,6 +30,9 @@ import time
 import sys
 import os
 
+# Import the clean_defs function from clean_definitions.py
+from clean_definitions import clean_defs
+
 # global variables used (and shared) by all ThreadDown instances
 exitFlag = 0
 errorFlag = False  # Drapeau pour signaler les erreurs techniques
@@ -138,7 +141,7 @@ class ThreadWrite(Thread):
 
         self.of.close()
 
-def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
+def main(filename, pos="all", lang="en", output_dir="data/temp/definitions", min_word_length=1, use_stopwords=True, stopwords_file=None):
     # 0. to measure download time; use `global` to be able to modify exitFlag
     globalStart = time.time()
     global exitFlag, errorFlag, not_found_words, request_counter, download_counter
@@ -164,12 +167,38 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
     # Also add language suffix
     input_filename = basename(filename)
     if pos in ["noun", "verb", "adjective"]:
-        output_fn = join(output_dir, splitext(input_filename)[0] + "-definitions-{}-{}.txt".format(pos, lang))
+        output_fn = join(output_dir, splitext(input_filename)[0] + "-definitions-{}.txt".format(pos))
     else:
-        output_fn = join(output_dir, splitext(input_filename)[0] + "-definitions-{}.txt".format(lang))
+        output_fn = join(output_dir, splitext(input_filename)[0] + "-definitions.txt")
     
     # Create filename for not found words
-    not_found_fn = join(output_dir, splitext(input_filename)[0] + "-not-found-{}.txt".format(lang))
+    not_found_fn = join(output_dir, splitext(input_filename)[0] + "-not-found.txt")
+
+    # Create filename for cleaned definitions
+    clean_output_fn = join(output_dir, splitext(basename(output_fn))[0] + "-clean.txt")
+
+    # Determine the location of stopwords file based on language
+    final_stopwords_file = stopwords_file  # Utiliser le fichier spécifié en priorité
+    if use_stopwords and not final_stopwords_file:
+        # Base path for stopwords files - try different common locations
+        potential_paths = [
+            join("data", "input", f"stopwords_{lang}.txt"),  # Current project structure
+            join(dirname(dirname(dirname(__file__))), "data", "input", f"stopwords_{lang}.txt"),  # Relative to script
+            join(os.path.expanduser("~"), "Side", "HG2VecMulti", "data", "input", f"stopwords_{lang}.txt")  # Absolute path
+        ]
+        
+        for path in potential_paths:
+            if isfile(path):
+                final_stopwords_file = path
+                print(f"Using stopwords file: {final_stopwords_file}")
+                break
+        
+        if not final_stopwords_file:
+            print(f"WARNING: {lang.upper()} stopwords file not found")
+    elif final_stopwords_file:
+        print(f"Using specified stopwords file: {final_stopwords_file}")
+    elif not use_stopwords:
+        print("Stopwords filtering disabled")
 
     # Get the dictionary downloaders for the specified language
     language_downloaders = get_language_downloaders(lang)
@@ -323,6 +352,11 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
                 download_counter[dict_code] * 100 / request_counter[dict_code]))
 
     print("\n-> Results written in", output_fn)
+    
+    # Clean the definitions and create a new file with the cleaned definitions
+    print("\nCleaning definitions...")
+    clean_defs(output_fn, clean_output_fn, "", min_word_length, final_stopwords_file)
+    print(f"-> Cleaned definitions written in {clean_output_fn}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -338,6 +372,13 @@ if __name__ == '__main__':
     parser.add_argument("-out", "--output_dir", help="""Output directory for definition files.
         Default is 'data/output/definitions'""", 
         default="data/output/definitions")
+    parser.add_argument("-l", "--min-length", help="""Minimum word length to keep in definitions (default: 1)""",
+        type=int, default=1)
+    parser.add_argument("--no-stopwords", help="""Do not filter out stopwords""",
+        action="store_true", default=False)
+    parser.add_argument("-s", "--stopwords", help="""Path to a specific stopwords file. 
+        If not specified, will look for stopwords_[lang].txt in data/input/ directory""",
+        default=None)
     args = parser.parse_args()
 
     if args.pos not in ["noun", "verb", "adjective", "all"]:
@@ -350,4 +391,5 @@ if __name__ == '__main__':
         print("It can be EN or FR. Using default language (EN)\n")
         args.lang = "en"
 
-    main(args.list_words, pos=args.pos, lang=args.lang, output_dir=args.output_dir)
+    main(args.list_words, pos=args.pos, lang=args.lang, output_dir=args.output_dir, 
+         min_word_length=args.min_length, use_stopwords=not args.no_stopwords, stopwords_file=args.stopwords)
