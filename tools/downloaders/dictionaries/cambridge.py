@@ -21,6 +21,7 @@
 
 import re
 from urllib.error import HTTPError
+from bs4 import BeautifulSoup
 from .base import DictionaryDownloader
 
 class CambridgeDownloader(DictionaryDownloader):
@@ -45,58 +46,48 @@ class CambridgeDownloader(DictionaryDownloader):
                   - url: URL consultée pour trouver les définitions ou None
                   - error_msg: Message d'erreur ou None si aucune erreur
         """
-        URL = "http://dictionary.cambridge.org/dictionary/english/" + word
+        URL = "https://dictionary.cambridge.org/dictionary/english/" + word
 
         if pos not in ["all", "adjective", "noun", "verb"]:
             pos = "all"
 
         try:
             html = self.get_html(URL)
-
-            # definitions are in a <b> tag that has the class "def"
-            defs_pat = re.compile('<b class="def">(.*?)</b>', re.I|re.S)
-
-            # need to extract definitions only if it's a certain pos type
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Utiliser le nouveau sélecteur pour trouver toutes les définitions
+            all_definitions = soup.select('div.def')
+            
+            # Si besoin de filtrer par partie du discours (POS)
             if pos in ["adjective", "noun", "verb"]:
-
-                # each type entry (adj, noun or verb) is in a "entry-body__el"
-                # block. A word might have many blocks (if it is both a noun and a
-                # verb, it will have 2 blocks). Moreover, there are also different
-                # blocks for British or American language. I can't extract blocks
-                # because there is no ending regex that works for every word, so I
-                # consider a block to be between the indexes of 2 consecutive
-                # block_pat matches. Last block goes to the end of html string.
-                block_pat = re.compile('<div class="entry-body__el ', re.I|re.S)
-                idx = [m.start() for m in block_pat.finditer(html)] + [len(html)]
-                span = [(idx[i], idx[i+1]) for i in range(len(idx)-1)]
-
-                # then for each block, I only extract the definitions if it matches
-                # the pos argument
-                pos_pat = re.compile('class="pos".*?>(.*?)</span>', re.I|re.S)
-                defs = []
-
-                for start, end in span:
-                    pos_extracted = re.search(pos_pat, html[start:end])
-
-                    # some words (like mice) do not have a pos info, so no pos
-                    # extracted
-                    if pos_extracted is None:
-                        continue
-
-                    pos_extracted = pos_extracted.group(1)
-
-                    if pos_extracted != pos:
-                        continue
-
-                    defs += re.findall(defs_pat, html[start:end])
-
-            # otherwise extract all definitions available
+                cleaned_defs = []
+                
+                # Trouver tous les blocs d'entrée
+                entry_blocks = soup.select('div.entry-body__el')
+                
+                for block in entry_blocks:
+                    # Chercher le type de partie du discours dans ce bloc
+                    pos_element = block.select_one('span.pos')
+                    
+                    # Si la partie du discours correspond à celle demandée
+                    if pos_element and pos in pos_element.text.lower():
+                        # Extraire les définitions de ce bloc
+                        definitions = block.select('div.def')
+                        for def_element in definitions:
+                            # Extraire le texte pur et le nettoyer
+                            text = def_element.get_text().strip()
+                            # Normaliser les espaces
+                            text = re.sub(r'\s+', ' ', text)
+                            cleaned_defs.append(text)
             else:
-                defs = re.findall(defs_pat, html)
-
-            # need to clean definitions of <a> and <span> tags. Use cleaner to
-            # replace these tags by empty string
-            cleaned_defs = [self.clean_html(x, '<.+?>') for x in defs]
+                # Si aucun filtre de partie du discours, prendre toutes les définitions
+                cleaned_defs = []
+                for def_element in all_definitions:
+                    # Extraire le texte pur et le nettoyer
+                    text = def_element.get_text().strip()
+                    # Normaliser les espaces
+                    text = re.sub(r'\s+', ' ', text)
+                    cleaned_defs.append(text)
             
             # Si aucune définition n'a été trouvée
             if not cleaned_defs:
@@ -112,8 +103,9 @@ class CambridgeDownloader(DictionaryDownloader):
             return None, URL, error_msg
         except Exception as e:
             error_msg = f"Error for '{word}' in Cambridge dictionary: {str(e)}"
-            print("\nERROR: * timeout error.")
-            print("       * retry Cambridge -", word)
+            print(f"\nERROR: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None, URL, error_msg
 
 # Instance to be imported by the downloader module
