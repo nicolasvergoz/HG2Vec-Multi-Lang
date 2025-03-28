@@ -78,32 +78,26 @@ class LarousseDownloader(DictionaryDownloader):
             
             # Extraire toutes les définitions selon le sélecteur fourni
             for definition_element in definitions_list:
-                # On doit extraire le texte mais ignorer le contenu des balises span
-                # Approche: récupérer le texte complet puis nettoyer
-                raw_text = definition_element.get_text()
+                # Créer une copie de l'élément pour éviter de modifier l'original
+                definition_copy = BeautifulSoup(str(definition_element), 'html.parser')
                 
-                # Obtenir le texte brut de l'élément
-                raw_text = definition_element.encode_contents().decode()
+                # Supprimer toutes les balises span et leur contenu
+                for span in definition_copy.find_all('span'):
+                    span.decompose()
                 
-                # Nettoyer les balises span et leur contenu
-                clean_text = re.sub(r'<span.*?</span>', '', raw_text)
+                # Supprimer les paragraphes de synonymes et leurs contenus
+                for p in definition_copy.find_all('p', class_=['LibelleSynonyme', 'Synonymes']):
+                    p.decompose()
                 
-                # Nettoyer les autres balises HTML mais conserver leur contenu
-                clean_text = re.sub(r'<.*?>', '', clean_text)
+                # Supprimer les exemples de définition
+                for example in definition_copy.find_all(class_='ExempleDefinition'):
+                    example.decompose()
+                
+                # Obtenir le texte nettoyé
+                clean_text = definition_copy.get_text().strip()
                 
                 # Nettoyer les espaces superflus
                 clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-                
-                # Pour une approche plus directe, on peut aussi parcourir les enfants directs
-                alternative_text = ""
-                for content in definition_element.contents:
-                    # Ignorer les balises span
-                    if content.name != 'span' and content.string:
-                        alternative_text += content.string
-                
-                # Utiliser le texte alternatif s'il est plus propre
-                if alternative_text.strip():
-                    clean_text = alternative_text.strip()
                 
                 # Ajouter la définition nettoyée
                 if clean_text:

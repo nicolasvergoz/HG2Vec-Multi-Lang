@@ -94,8 +94,8 @@ class ThreadDown(Thread):
 
                         # then add the fetched definition, the word and the
                         # dictionary used as a message for ThreadWrite
-                        self.res_queue.put("{} {} {}".format(self.dict_name, word,
-                                                           " ".join(result)))
+                        # Format without dictionary prefix
+                        self.res_queue.put("{} {}".format(word, " ".join(result)))
                     else:
                         # Liste vide - pas de définition mais pas d'erreur technique
                         print(f"\nNOTE: Empty definition found for '{word}' in {self.dict_name} - adding to not-found list")
@@ -141,10 +141,16 @@ class ThreadWrite(Thread):
 
         self.of.close()
 
-def main(filename, pos="all", lang="en", output_dir="data/temp/definitions", min_word_length=1, use_stopwords=True, stopwords_file=None):
+def main(filename, pos="all", lang="en", output_dir="data/output/definitions", min_word_length=1, use_stopwords=True, stopwords_file=None, max_iterations=1, max_definitions=None):
     # 0. to measure download time; use `global` to be able to modify exitFlag
     globalStart = time.time()
     global exitFlag, errorFlag, not_found_words, request_counter, download_counter
+    
+    # Use temp directory during processing
+    temp_dir = "data/temp/definitions"
+    if not exists(temp_dir):
+        os.makedirs(temp_dir)
+        print(f"Created temporary directory: {temp_dir}")
 
     # 1. read the file to get the list of words to download definitions
     vocabulary = set()
@@ -153,29 +159,10 @@ def main(filename, pos="all", lang="en", output_dir="data/temp/definitions", min
             vocabulary.add(line.strip())
 
     vocabulary_size = len(vocabulary)
+    original_vocabulary_size = vocabulary_size
     print("Reading file {}: Done".format(filename))
-    print("Vocabulary size:", vocabulary_size)
+    print("Initial vocabulary size:", vocabulary_size)
     print("Language:", "French" if lang == "fr" else "English")
-
-    # Create output directory if it doesn't exist
-    if not exists(output_dir):
-        os.makedirs(output_dir)
-        print(f"Created output directory: {output_dir}")
-
-    # add "-definitions" before the file extension to create output filename.
-    # If pos is noun/verb/adjective, add it also to the output filename
-    # Also add language suffix
-    input_filename = basename(filename)
-    if pos in ["noun", "verb", "adjective"]:
-        output_fn = join(output_dir, splitext(input_filename)[0] + "-definitions-{}.txt".format(pos))
-    else:
-        output_fn = join(output_dir, splitext(input_filename)[0] + "-definitions.txt")
-    
-    # Create filename for not found words
-    not_found_fn = join(output_dir, splitext(input_filename)[0] + "-not-found.txt")
-
-    # Create filename for cleaned definitions
-    clean_output_fn = join(output_dir, splitext(basename(output_fn))[0] + "-clean.txt")
 
     # Determine the location of stopwords file based on language
     final_stopwords_file = stopwords_file  # Utiliser le fichier spécifié en priorité
@@ -199,164 +186,260 @@ def main(filename, pos="all", lang="en", output_dir="data/temp/definitions", min
         print(f"Using specified stopwords file: {final_stopwords_file}")
     elif not use_stopwords:
         print("Stopwords filtering disabled")
-
-    # Get the dictionary downloaders for the specified language
-    language_downloaders = get_language_downloaders(lang)
     
-    # Initialiser les compteurs pour chaque dictionnaire
-    for downloader in language_downloaders.values():
-        request_counter[downloader.short_code] = 0
-        download_counter[downloader.short_code] = 0
+    # Track all downloaded definitions to avoid duplicates across iterations
+    all_processed_words = set()
+    all_definitions_count = 0
     
-    # look if some definitions have already been downloaded. If that's the case,
-    # add the words present in output_fn in the aleady_done variable
-    already_done = {downloader.short_code: set() for downloader in language_downloaders.values()}
-    reusing = False
-    if isfile(output_fn): # need to read the file, first test if it exists
-        with open(output_fn) as f:
-            for line in f:
-                line = line.split()
-                # line[0] is dictionary name, line[1] the word (already) fetched
-                if len(line) < 2:
-                    continue
-                if line[0] in already_done:
-                    already_done[line[0]].add(line[1])
-                    reusing = True
-    if reusing:
-        print("\nSome definitions have already been downloaded into {}.".format(
-            output_fn))
-        print("Reusing: ")
-        for dic in already_done:
-            if len(already_done[dic]) > 0:
-                print("  - {} definitions from {}".format(
-                    len(already_done[dic]), dic))
+    # For each iteration
+    current_iteration = 1
+    input_file = filename
+    
+    while current_iteration <= max_iterations:
+        if max_definitions and all_definitions_count >= max_definitions:
+            print(f"\nReached maximum number of definitions ({max_definitions})")
+            break
+            
+        print(f"\n===== Iteration {current_iteration}/{max_iterations} =====")
+        print(f"Current vocabulary size: {len(vocabulary)}")
+        
+        # Generate iteration-specific filenames
+        input_filename = basename(input_file)
+        if pos in ["noun", "verb", "adjective"]:
+            output_fn = join(temp_dir, f"iter{current_iteration}-{splitext(input_filename)[0]}-definitions-{pos}.txt")
+        else:
+            output_fn = join(temp_dir, f"iter{current_iteration}-{splitext(input_filename)[0]}-definitions.txt")
+        
+        # Create filename for not found words
+        not_found_fn = join(temp_dir, f"iter{current_iteration}-{splitext(input_filename)[0]}-not-found.txt")
 
-    # 2. create queues containing all words to fetch based on available dictionaries
-    queues = {downloader.short_code: Queue() for downloader in language_downloaders.values()}
-    queue_msg = Queue()
+        # Create filename for cleaned definitions
+        clean_output_fn = join(temp_dir, f"iter{current_iteration}-{splitext(basename(output_fn))[0]}-clean.txt")
+        
+        # Reset counter for this iteration
+        not_found_words = []
 
-    # only add words in queue if they are not already done
-    for w in vocabulary:
+        # Get the dictionary downloaders for the specified language
+        language_downloaders = get_language_downloaders(lang)
+        
+        # Initialiser les compteurs pour chaque dictionnaire
+        for downloader in language_downloaders.values():
+            request_counter[downloader.short_code] = 0
+            download_counter[downloader.short_code] = 0
+        
+        # look if some definitions have already been downloaded. If that's the case,
+        # add the words present in output_fn in the aleady_done variable
+        already_done = {downloader.short_code: set() for downloader in language_downloaders.values()}
+        # Add all previously processed words
+        for downloader in language_downloaders.values():
+            already_done[downloader.short_code].update(all_processed_words)
+            
+        reusing = False
+        if isfile(output_fn): # need to read the file, first test if it exists
+            with open(output_fn) as f:
+                for line in f:
+                    line = line.split()
+                    # In the new format, line[0] is the word directly (no dictionary prefix)
+                    if len(line) < 1:
+                        continue
+                    # Add the word to all dictionaries' already_done sets
+                    word = line[0]
+                    for dict_code in already_done:
+                        already_done[dict_code].add(word)
+                        reusing = True
+        if reusing:
+            print("\nSome definitions have already been downloaded into {}.".format(
+                output_fn))
+            print("Reusing: ")
+            for dic in already_done:
+                if len(already_done[dic]) > 0:
+                    print("  - {} definitions from {}".format(
+                        len(already_done[dic]), dic))
+
+        # 2. create queues containing all words to fetch based on available dictionaries
+        queues = {downloader.short_code: Queue() for downloader in language_downloaders.values()}
+        queue_msg = Queue()
+
+        # Only add words in queue if they are not already done
+        for w in vocabulary:
+            for downloader in language_downloaders.values():
+                dict_code = downloader.short_code
+                if w not in already_done[dict_code]:
+                    queues[dict_code].put(w)
+                    # Track all words being processed
+                    all_processed_words.add(w)
+
+        # 3. create threads
+        threads = []
+        thread_writer = ThreadWrite(output_fn, queue_msg)
+        thread_writer.start()
+        threads.append(thread_writer)
+
+        # Adjust thread count based on dictionaries used
+        NB_THREAD = cpu_count() * 3
+        
+        # Calculate threads per dictionary
+        nb_dicts = len(language_downloaders)
+        if nb_dicts > 0:
+            threads_per_dict = max(1, NB_THREAD // nb_dicts)
+        else:
+            print(f"ERROR: No dictionaries available for language '{lang}'")
+            exitFlag = 1
+            thread_writer.join()
+            return
+        
+        # Create threads for each dictionary
+        print(f"\nDownloading definitions using {threads_per_dict} threads per dictionary...")
         for downloader in language_downloaders.values():
             dict_code = downloader.short_code
-            if not w in already_done[dict_code]:
-                queues[dict_code].put(w)
+            print(f"  - Using {downloader.name} dictionary (code: {dict_code})")
+            for _ in range(threads_per_dict):
+                thread = ThreadDown(dict_code, pos, queues[dict_code], queue_msg)
+                thread.start()
+                threads.append(thread)
 
-    # 3. create threads
-    threads = []
-    thread_writer = ThreadWrite(output_fn, queue_msg)
-    thread_writer.start()
-    threads.append(thread_writer)
-
-    # Adjust thread count based on dictionaries used
-    NB_THREAD = cpu_count() * 3
-    
-    # Calculate threads per dictionary
-    nb_dicts = len(language_downloaders)
-    if nb_dicts > 0:
-        threads_per_dict = max(1, NB_THREAD // nb_dicts)
-    else:
-        print(f"ERROR: No dictionaries available for language '{lang}'")
-        exitFlag = 1
-        thread_writer.join()
-        return
-    
-    # Create threads for each dictionary
-    print(f"\nDownloading definitions using {threads_per_dict} threads per dictionary...")
-    for downloader in language_downloaders.values():
-        dict_code = downloader.short_code
-        print(f"  - Using {downloader.name} dictionary (code: {dict_code})")
-        for _ in range(threads_per_dict):
-            thread = ThreadDown(dict_code, pos, queues[dict_code], queue_msg)
-            thread.start()
-            threads.append(thread)
-
-    # 4. monitor threads and check for errors, show progress
-    percent = 0
-    
-    # Wait for threads to complete
-    try:
-        # Continue checking while threads are running
-        while True:
-            # Check if all queues are empty
-            all_queues_empty = all(q.empty() for q in queues.values()) and queue_msg.empty()
-            if all_queues_empty:
-                break
+        # 4. monitor threads and check for errors, show progress
+        percent = 0
+        
+        # Wait for threads to complete
+        try:
+            # Continue checking while threads are running
+            while True:
+                # Check if all queues are empty
+                all_queues_empty = all(q.empty() for q in queues.values()) and queue_msg.empty()
+                if all_queues_empty:
+                    break
+                    
+                # Calculate progress based on requests processed
+                if nb_dicts > 0:
+                    total_requests = sum(request_counter[code] for code in queues.keys())
+                    progress = total_requests / (nb_dicts * len(vocabulary)) * 100
+                    tmp = int(progress) + 1
+                    if tmp != percent:
+                        print('\r{0}%'.format(tmp), end="")
+                        percent = tmp
                 
-            # Calculate progress based on requests processed
-            if nb_dicts > 0:
-                total_requests = sum(request_counter[code] for code in queues.keys())
-                progress = total_requests / (nb_dicts * vocabulary_size) * 100
-                tmp = int(progress) + 1
-                if tmp != percent:
-                    print('\r{0}%'.format(tmp), end="")
-                    percent = tmp
-            
-            # Dormir un peu pour éviter de surcharger le CPU
-            time.sleep(0.1)
-            
-    except KeyboardInterrupt:
-        print("\nKeyboard interrupt detected. Stopping all threads...")
-        # Seule l'interruption clavier doit arrêter le processus
-    
-    exitFlag = 1
-    # we only wait thread_writer to join because this is the most important
-    # thread in the code and we are only interested in what the program
-    # is writing.
-    print("\nWaiting thread_writer to join.")
-    thread_writer.join()
+                # Dormir un peu pour éviter de surcharger le CPU
+                time.sleep(0.1)
+                
+        except KeyboardInterrupt:
+            print("\nKeyboard interrupt detected. Stopping all threads...")
+            # Seule l'interruption clavier doit arrêter le processus
+        
+        exitFlag = 1
+        # we only wait thread_writer to join because this is the most important
+        # thread in the code and we are only interested in what the program
+        # is writing.
+        print("\nWaiting thread_writer to join.")
+        thread_writer.join()
 
-    # 5. get total time and some results infos.
-    print("Total time: {:.2f} sec\n".format(time.time() - globalStart))
-    
-    # Écrire les mots non trouvés dans un fichier séparé
-    if len(not_found_words) > 0:
-        with open(not_found_fn, "w") as nf:
-            for item in not_found_words:
-                if isinstance(item, tuple):
-                    if len(item) >= 3:  # Format (mot, url, error_msg)
-                        word, url, error_msg = item
-                        if url and error_msg:
-                            nf.write(f"{word} {url} # {error_msg}\n")
-                        elif url:
-                            nf.write(f"{word} {url}\n")
-                        elif error_msg:
-                            nf.write(f"{word} # {error_msg}\n")
-                        else:
-                            nf.write(f"{word}\n")
-                    elif len(item) == 2:  # Format (mot, url)
-                        word, url = item
-                        if url:
-                            nf.write(f"{word} {url}\n")
-                        else:
-                            nf.write(f"{word}\n")
-                    else:  # Format simple (mot)
-                        nf.write(f"{item[0]}\n")
-                else:
-                    # Pour la compatibilité avec l'ancien format
-                    nf.write(f"{item}\n")
-        print(f"Words without definitions: {len(not_found_words)}")
-        print(f"List of words without definitions written to: {not_found_fn}")
-    
-    print("S T A T S (# successful download / # requests)")
-    print("==============================================")
-    
-    # Only show statistics for dictionaries used
-    for downloader in language_downloaders.values():
-        dict_code = downloader.short_code
-        if request_counter[dict_code] > 0:
-            print("{}   {}/{}".format(
-                    dict_code, download_counter[dict_code], request_counter[dict_code]),
-                    end="")
-            print("  ({:.1f}%)".format(
-                download_counter[dict_code] * 100 / request_counter[dict_code]))
+        # 5. get total time and some results infos.
+        print("Iteration time: {:.2f} sec\n".format(time.time() - globalStart))
+        
+        # Écrire les mots non trouvés dans un fichier séparé
+        if len(not_found_words) > 0:
+            with open(not_found_fn, "w") as nf:
+                for item in not_found_words:
+                    if isinstance(item, tuple):
+                        if len(item) >= 3:  # Format (mot, url, error_msg)
+                            word, url, error_msg = item
+                            if url and error_msg:
+                                nf.write(f"{word} {url} # {error_msg}\n")
+                            elif url:
+                                nf.write(f"{word} {url}\n")
+                            elif error_msg:
+                                nf.write(f"{word} # {error_msg}\n")
+                            else:
+                                nf.write(f"{word}\n")
+                        elif len(item) == 2:  # Format (mot, url)
+                            word, url = item
+                            if url:
+                                nf.write(f"{word} {url}\n")
+                            else:
+                                nf.write(f"{word}\n")
+                        else:  # Format simple (mot)
+                            nf.write(f"{item[0]}\n")
+                    else:
+                        # Pour la compatibilité avec l'ancien format
+                        nf.write(f"{item}\n")
+            print(f"Words without definitions: {len(not_found_words)}")
+            print(f"List of words without definitions written to: {not_found_fn}")
+        
+        print("S T A T S (# successful download / # requests)")
+        print("==============================================")
+        
+        # Only show statistics for dictionaries used
+        for downloader in language_downloaders.values():
+            dict_code = downloader.short_code
+            if request_counter[dict_code] > 0:
+                print("{}   {}/{}".format(
+                        dict_code, download_counter[dict_code], request_counter[dict_code]),
+                        end="")
+                print("  ({:.1f}%)".format(
+                    download_counter[dict_code] * 100 / request_counter[dict_code]))
+                # Add to total count
+                all_definitions_count += download_counter[dict_code]
 
-    print("\n-> Results written in", output_fn)
+        print("\n-> Raw definitions written in", output_fn)
+        
+        # Clean the definitions and create a new file with the cleaned definitions
+        print("\nCleaning definitions...")
+        clean_defs(output_fn, clean_output_fn, "", min_word_length, final_stopwords_file)
+        print(f"-> Cleaned definitions written in {clean_output_fn}")
+        
+        # For next iteration, extract new words from cleaned definitions if not the last iteration
+        if current_iteration < max_iterations and (not max_definitions or all_definitions_count < max_definitions):
+            print("\nExtracting new words for the next iteration...")
+            new_vocabulary = set()
+            with open(clean_output_fn, 'r') as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) >= 2:  # word definition...
+                        # Words 1+ are the definition words
+                        new_vocabulary.update(parts[1:])
+            
+            # Filter out already processed words
+            new_vocabulary = new_vocabulary - all_processed_words
+            
+            # Create a temporary file for the new vocabulary
+            next_input_file = join(temp_dir, f"iter{current_iteration+1}-vocabulary.txt")
+            with open(next_input_file, 'w') as f:
+                for word in new_vocabulary:
+                    f.write(f"{word}\n")
+            
+            print(f"Found {len(new_vocabulary)} new words for next iteration")
+            print(f"New vocabulary written to {next_input_file}")
+            
+            # Update for next iteration
+            vocabulary = new_vocabulary
+            input_file = next_input_file
+        
+        # Reset exitFlag for next iteration
+        exitFlag = 0
+        current_iteration += 1
     
-    # Clean the definitions and create a new file with the cleaned definitions
-    print("\nCleaning definitions...")
-    clean_defs(output_fn, clean_output_fn, "", min_word_length, final_stopwords_file)
-    print(f"-> Cleaned definitions written in {clean_output_fn}")
+    # Move final files to output directory if they don't exist yet
+    if not exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Copy final iteration files to output directory
+    final_definitions = join(output_dir, splitext(basename(filename))[0] + "-definitions.txt")
+    final_clean = join(output_dir, splitext(basename(filename))[0] + "-definitions-clean.txt")
+    
+    import shutil
+    if clean_output_fn and isfile(clean_output_fn):
+        shutil.copy2(clean_output_fn, final_clean)
+        print(f"\nFinal cleaned definitions copied to: {final_clean}")
+    if output_fn and isfile(output_fn):
+        shutil.copy2(output_fn, final_definitions)
+        print(f"Final raw definitions copied to: {final_definitions}")
+    
+    total_time = time.time() - globalStart
+    print(f"\nVocabulary expansion complete:")
+    print(f"  - Started with: {original_vocabulary_size} words")
+    print(f"  - Total definitions: {all_definitions_count}")
+    print(f"  - Total iterations completed: {current_iteration - 1}")
+    print(f"  - Total processing time: {total_time:.2f} seconds")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -369,7 +452,7 @@ if __name__ == '__main__':
         the definitions for all POS""", type=str.lower, default="all")
     parser.add_argument("-lang", help="""Either EN (English) or FR (French). Determines
         which dictionaries to use. EN uses Cambridge, Dictionary.com, and Collins. FR uses only Le Robert.""", type=str.lower, default="en")
-    parser.add_argument("-out", "--output_dir", help="""Output directory for definition files.
+    parser.add_argument("-out", "--output_dir", help="""Output directory for final definition files.
         Default is 'data/output/definitions'""", 
         default="data/output/definitions")
     parser.add_argument("-l", "--min-length", help="""Minimum word length to keep in definitions (default: 1)""",
@@ -379,6 +462,10 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--stopwords", help="""Path to a specific stopwords file. 
         If not specified, will look for stopwords_[lang].txt in data/input/ directory""",
         default=None)
+    parser.add_argument("-i", "--iterations", help="""Number of vocabulary expansion iterations (default: 1)""",
+        type=int, default=1)
+    parser.add_argument("-m", "--max-definitions", help="""Maximum number of definitions to download across all iterations""",
+        type=int, default=None)
     args = parser.parse_args()
 
     if args.pos not in ["noun", "verb", "adjective", "all"]:
@@ -392,4 +479,5 @@ if __name__ == '__main__':
         args.lang = "en"
 
     main(args.list_words, pos=args.pos, lang=args.lang, output_dir=args.output_dir, 
-         min_word_length=args.min_length, use_stopwords=not args.no_stopwords, stopwords_file=args.stopwords)
+         min_word_length=args.min_length, use_stopwords=not args.no_stopwords, stopwords_file=args.stopwords,
+         max_iterations=args.iterations, max_definitions=args.max_definitions)

@@ -59,8 +59,8 @@ def clean_defs(definitions, output_file, vocab="", min_word_length=1, stopwords_
             if len(ar) < 2:  # Skip empty lines or lines with just the dictionary name
                 continue
                 
-            dictionary_name = ar[0]  # First token is the dictionary name
-            word, defs = ar[1], ar[2:]  # Second token is the word, rest is definition
+            # New format: first token is the word, rest is definition
+            word, defs = ar[0], ar[1:]
             regouped_dictionary[word].append(defs)
 
     # Load stopwords if a file is provided
