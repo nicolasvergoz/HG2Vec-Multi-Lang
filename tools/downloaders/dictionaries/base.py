@@ -23,6 +23,8 @@ import re
 import string
 import unicodedata
 import urllib.request
+import gzip
+import io
 from urllib.error import HTTPError
 from abc import ABC, abstractmethod
 
@@ -113,7 +115,27 @@ class DictionaryDownloader:
             UnicodeDecodeError: If content cannot be decoded
         """
         req = urllib.request.Request(url, headers=self.headers)
-        return urllib.request.urlopen(req).read().decode('utf-8')
+        response = urllib.request.urlopen(req)
+        
+        # Vérifier si la réponse est compressée avec gzip
+        if response.info().get('Content-Encoding') == 'gzip':
+            content = gzip.decompress(response.read())
+        else:
+            content = response.read()
+        
+        # Essayer d'abord l'encodage utf-8 (cas le plus courant)
+        try:
+            return content.decode('utf-8')
+        except UnicodeDecodeError:
+            # Si utf-8 échoue, essayer d'autres encodages courants
+            for encoding in ['latin-1', 'iso-8859-1', 'windows-1252']:
+                try:
+                    return content.decode(encoding)
+                except UnicodeDecodeError:
+                    continue
+            
+            # En dernier recours, utiliser utf-8 avec remplacement des caractères invalides
+            return content.decode('utf-8', errors='replace')
     
     def clean_html(self, html, pattern):
         """Clean HTML tags from text.

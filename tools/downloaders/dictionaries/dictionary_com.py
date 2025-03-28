@@ -21,6 +21,7 @@
 
 import re
 from urllib.error import HTTPError
+from bs4 import BeautifulSoup
 from .base import DictionaryDownloader
 
 class DictionaryDotComDownloader(DictionaryDownloader):
@@ -52,36 +53,42 @@ class DictionaryDotComDownloader(DictionaryDownloader):
 
         try:
             html = self.get_html(URL)
-
-            # New pattern to match the updated selector div.NZKOFkdkcvYgD3lqOIJw > div
-            defs_pat = re.compile('<div class="NZKOFkdkcvYgD3lqOIJw"><div>(.*?)</div></div>', re.I|re.S)
+            soup = BeautifulSoup(html, 'html.parser')
             
-            # Extract sections based on POS if needed
-            if pos in ["adjective", "noun", "verb"]:
-                # For filtering by POS, we need to adapt this part to the new HTML structure
-                # This is a placeholder - the exact implementation would depend on how POS is marked in the new structure
-                # This is a placeholder - the exact implementation would depend on how POS is marked in the new structure
-                pos_pat = re.compile('class=.+pos">(.*?)</span>', re.I|re.S)
-                sections = re.findall(pos_pat, html)
-                
-                # Extract definitions from sections matching the requested POS
-                raw_defs = []
-                for section in sections:
-                    if pos in section.lower():
-                        raw_defs.extend(re.findall(defs_pat, section))
-            else:
-                # Extract all definitions without filtering by POS
-                raw_defs = re.findall(defs_pat, html)
+            # Find all definitions using the CSS selector
+            definition_elements = soup.select('div.NZKOFkdkcvYgD3lqOIJw > div')
             
-            # Clean the definitions by removing all HTML tags and normalizing whitespace
+            # Extract definitions and filter by POS if needed
             cleaned_defs = []
-            for def_text in raw_defs:
-                # Remove HTML tags but preserve the text content
-                cleaned = self.clean_html(def_text, '<.+?>')
-                # Remove comment tags and normalize whitespace
-                cleaned = re.sub('<!--\s*-->', ' ', cleaned)
-                cleaned = re.sub('\s+', ' ', cleaned).strip()
-                cleaned_defs.append(cleaned)
+            
+            if pos in ["adjective", "noun", "verb"]:
+                # We need to find sections with the requested POS
+                # This implementation depends on the actual structure of Dictionary.com
+                # Assuming POS information is available in elements with a certain class
+                sections = soup.find_all(lambda tag: tag.name == 'span' and 
+                                                    'pos' in tag.get('class', []))
+                
+                for section in sections:
+                    if pos in section.text.lower():
+                        # Find the parent section containing this POS
+                        parent_section = section.find_parent('section')
+                        if parent_section:
+                            # Find all definitions in this section
+                            pos_definitions = parent_section.select('div.NZKOFkdkcvYgD3lqOIJw > div')
+                            for def_element in pos_definitions:
+                                # Get text content only
+                                text = def_element.get_text().strip()
+                                # Normalize whitespace
+                                text = re.sub(r'\s+', ' ', text)
+                                cleaned_defs.append(text)
+            else:
+                # Extract all definitions if no POS filter
+                for def_element in definition_elements:
+                    # Get text content only
+                    text = def_element.get_text().strip()
+                    # Normalize whitespace
+                    text = re.sub(r'\s+', ' ', text)
+                    cleaned_defs.append(text)
             
             if not cleaned_defs:
                 return None, URL, f"No definition found for '{word}' in Dictionary.com"
