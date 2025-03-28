@@ -47,12 +47,13 @@ not_found_words = []  # List to store words not found, their URLs and error mess
 
 class ThreadDown(Thread):
     """Class representing a thread that download definitions."""
-    def __init__(self, dict_name, pos, data_queue, res_queue):
+    def __init__(self, dict_name, pos, data_queue, res_queue, ignore_warnings=False):
         Thread.__init__(self)
         self.dict_name  = dict_name
         self.pos        = pos # part of speech (noun, verb, adjective or all)
         self.data_queue = data_queue
         self.res_queue  = res_queue
+        self.ignore_warnings = ignore_warnings
 
     def run(self):
         global exitFlag, errorFlag, not_found_words
@@ -70,22 +71,31 @@ class ThreadDown(Thread):
                     if isinstance(result, tuple) and result[0] is None:
                         if len(result) >= 3:  # Format with error (None, url, error_msg)
                             # Word not found - add it to the list with its URL and error message
-                            print(f"\nNOTE: No definition found for '{word}' in {self.dict_name} - adding to not-found list with URL and error message")
-                            notFoundLock.acquire()
-                            not_found_words.append((word, result[1], result[2]))  # Tuple (word, url, error_msg)
-                            notFoundLock.release()
+                            if not self.ignore_warnings:
+                                print(f"\nNOTE: No definition found for '{word}' in {self.dict_name} - adding to not-found list with URL and error message")
+                                notFoundLock.acquire()
+                                not_found_words.append((word, result[1], result[2]))  # Tuple (word, url, error_msg)
+                                notFoundLock.release()
+                            else:
+                                print(f"\nSkipping '{word}' (no definition found in {self.dict_name})")
                         else:  # Format with just the URL (None, url)
                             # Word not found - add it to the list with its URL
-                            print(f"\nNOTE: No definition found for '{word}' in {self.dict_name} - adding to not-found list with URL")
-                            notFoundLock.acquire()
-                            not_found_words.append((word, result[1], None))  # Tuple (word, url, None)
-                            notFoundLock.release()
+                            if not self.ignore_warnings:
+                                print(f"\nNOTE: No definition found for '{word}' in {self.dict_name} - adding to not-found list with URL")
+                                notFoundLock.acquire()
+                                not_found_words.append((word, result[1], None))  # Tuple (word, url, None)
+                                notFoundLock.release()
+                            else:
+                                print(f"\nSkipping '{word}' (no definition found in {self.dict_name})")
                     elif result is None:
                         # Word not found - add it to the list without URL (for dictionaries other than Le Robert)
-                        print(f"\nNOTE: No definition found for '{word}' in {self.dict_name} - adding to not-found list")
-                        notFoundLock.acquire()
-                        not_found_words.append((word, None, None))  # Tuple (word, None, None)
-                        notFoundLock.release()
+                        if not self.ignore_warnings:
+                            print(f"\nNOTE: No definition found for '{word}' in {self.dict_name} - adding to not-found list")
+                            notFoundLock.acquire()
+                            not_found_words.append((word, None, None))  # Tuple (word, None, None)
+                            notFoundLock.release()
+                        else:
+                            print(f"\nSkipping '{word}' (no definition found in {self.dict_name})")
                     elif len(result) > 0:
                         # if len > 0, the downloaded definition contains at least
                         # one word, we can add 1 to the number of downloads
@@ -99,10 +109,13 @@ class ThreadDown(Thread):
                         self.res_queue.put("{} {}".format(word, " ".join(result)))
                     else:
                         # Empty list - no definition but no technical error
-                        print(f"\nNOTE: Empty definition found for '{word}' in {self.dict_name} - adding to not-found list")
-                        notFoundLock.acquire()
-                        not_found_words.append((word, None, "Empty definition"))  # Tuple (word, None, error)
-                        notFoundLock.release()
+                        if not self.ignore_warnings:
+                            print(f"\nNOTE: Empty definition found for '{word}' in {self.dict_name} - adding to not-found list")
+                            notFoundLock.acquire()
+                            not_found_words.append((word, None, "Empty definition"))  # Tuple (word, None, error)
+                            notFoundLock.release()
+                        else:
+                            print(f"\nSkipping '{word}' (empty definition in {self.dict_name})")
                 except Exception as e:
                     # Don't stop the process, just log the error and continue
                     error_message = f"Technical exception: {str(e)}"
@@ -111,9 +124,12 @@ class ThreadDown(Thread):
                     print("Continuing with next word...")
                     
                     # Add to the list of words not found with the error message
-                    notFoundLock.acquire()
-                    not_found_words.append((word, None, error_message))
-                    notFoundLock.release()
+                    if not self.ignore_warnings:
+                        notFoundLock.acquire()
+                        not_found_words.append((word, None, error_message))
+                        notFoundLock.release()
+                    else:
+                        print(f"Skipping '{word}' due to technical error")
                     
                     # Don't set errorFlag to True to avoid stopping other threads
                     # Just continue with the next word
@@ -142,7 +158,7 @@ class ThreadWrite(Thread):
 
         self.of.close()
 
-def main(filename, pos="all", lang="en", output_dir="data/output/definitions", min_word_length=1, use_stopwords=True, stopwords_file=None, max_iterations=1, max_definitions=None):
+def main(filename, pos="all", lang="en", output_dir="data/output/definitions", min_word_length=1, use_stopwords=True, stopwords_file=None, max_iterations=1, max_definitions=None, ignore_warnings=False):
     # 0. to measure download time; use `global` to be able to modify exitFlag
     globalStart = time.time()
     global exitFlag, errorFlag, not_found_words, request_counter, download_counter
@@ -311,7 +327,7 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
             dict_code = downloader.short_code
             print(f"  - Using {downloader.name} dictionary (code: {dict_code})")
             for _ in range(threads_per_dict):
-                thread = ThreadDown(dict_code, pos, queues[dict_code], queue_msg)
+                thread = ThreadDown(dict_code, pos, queues[dict_code], queue_msg, ignore_warnings)
                 thread.start()
                 threads.append(thread)
 
@@ -539,6 +555,8 @@ if __name__ == '__main__':
         type=int, default=1)
     parser.add_argument("-m", "--max-definitions", help="""Maximum number of definitions to download across all iterations""",
         type=int, default=None)
+    parser.add_argument("--ignore-warnings", help="""Skip words with errors or empty definitions instead of adding them to the not-found list""",
+        action="store_true", default=False)
     args = parser.parse_args()
 
     if args.pos not in ["noun", "verb", "adjective", "all"]:
@@ -553,4 +571,5 @@ if __name__ == '__main__':
 
     main(args.list_words, pos=args.pos, lang=args.lang, output_dir=args.output_dir, 
          min_word_length=args.min_length, use_stopwords=not args.no_stopwords, stopwords_file=args.stopwords,
-         max_iterations=args.iterations, max_definitions=args.max_definitions)
+         max_iterations=args.iterations, max_definitions=args.max_definitions,
+         ignore_warnings=args.ignore_warnings)

@@ -21,6 +21,7 @@ python tools/downloaders/download_definitions.py data/input/test_words_fr.txt -l
 - `--no-stopwords`: Disable stopwords filtering
 - `-i` / `--iterations`: Number of vocabulary expansion iterations (default: 1)
 - `-m` / `--max-definitions`: Maximum number of definitions to download across all iterations (optional)
+- `--ignore-warnings`: Skip words with errors or empty definitions instead of adding them to the not-found list (default: false)
 
 ### Process Overview
 
