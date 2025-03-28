@@ -1,28 +1,10 @@
-[build-system]
-requires = ["setuptools>=42", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "hg2vec-fr"
+name = "hg2vec-multilang"
 version = "0.1.0"
-description = "hg2vec-fr Python project"
+description = "hg2vec multi language based on HG2Vec and Dict2Vec"
 requires-python = ">=3.8"
 authors = [
     "Nicolas Vergoz <5927350+nicolasvergoz@users.noreply.github.com>",
     "Julien Tissier <30314448+tca19@users.noreply.github.com>",
     "Qitong-Wang <42950427+Qitong-Wang@users.noreply.github.com>"
 ]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=6.0",
-    "black>=21.5b2",
-    "isort>=5.9.1",
-    "flake8>=3.9.2",
-]
-
-[tool.black]
-line-length = 88
-
-[tool.isort]
-profile = "black" 
