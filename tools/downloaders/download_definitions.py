@@ -196,6 +196,7 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
     input_file = filename
     
     while current_iteration <= max_iterations:
+        # Vérifier si on a atteint le nombre maximum de définitions avant de commencer l'itération
         if max_definitions and all_definitions_count >= max_definitions:
             print(f"\nReached maximum number of definitions ({max_definitions})")
             break
@@ -213,8 +214,11 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
         # Create filename for not found words
         not_found_fn = join(temp_dir, f"iter{current_iteration}-{splitext(input_filename)[0]}-not-found.txt")
 
-        # Create filename for cleaned definitions
-        clean_output_fn = join(temp_dir, f"iter{current_iteration}-{splitext(basename(output_fn))[0]}-clean.txt")
+        # Create filename for cleaned definitions - sans le préfixe "iter<N>-"
+        clean_output_fn = join(temp_dir, f"{splitext(basename(output_fn))[0].replace(f'iter{current_iteration}-', '')}-clean.txt")
+        
+        # Filename for accumulated definitions (conservé entre les itérations)
+        accumulated_clean_fn = join(temp_dir, "accumulated-definitions-clean.txt")
         
         # Reset counter for this iteration
         not_found_words = []
@@ -309,6 +313,14 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
                 all_queues_empty = all(q.empty() for q in queues.values()) and queue_msg.empty()
                 if all_queues_empty:
                     break
+                
+                # Vérifier si on a atteint le nombre maximum de définitions
+                current_definitions_count = sum(download_counter.values())
+                if max_definitions and (all_definitions_count + current_definitions_count) >= max_definitions:
+                    print(f"\nMaximum number of definitions reached ({max_definitions})")
+                    # Arrêter tous les threads de téléchargement
+                    exitFlag = 1
+                    break
                     
                 # Calculate progress based on requests processed
                 if nb_dicts > 0:
@@ -387,19 +399,56 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
         clean_defs(output_fn, clean_output_fn, "", min_word_length, final_stopwords_file)
         print(f"-> Cleaned definitions written in {clean_output_fn}")
         
+        # Fusionner les définitions nettoyées avec les définitions accumulées des itérations précédentes
+        print("\nFusionner avec les définitions des itérations précédentes...")
+        all_definitions = {}  # Dictionnaire pour stocker toutes les définitions (mot -> définition)
+        
+        # Lire les définitions existantes si elles existent
+        if isfile(accumulated_clean_fn):
+            with open(accumulated_clean_fn, 'r') as f:
+                for line in f:
+                    parts = line.strip().split(' ', 1)  # Séparer le mot et sa définition
+                    if len(parts) >= 2:
+                        word, definition = parts
+                        all_definitions[word] = definition
+            print(f"Chargé {len(all_definitions)} définitions existantes depuis {accumulated_clean_fn}")
+        
+        # Ajouter les nouvelles définitions
+        new_definitions_count = 0
+        with open(clean_output_fn, 'r') as f:
+            for line in f:
+                parts = line.strip().split(' ', 1)  # Séparer le mot et sa définition
+                if len(parts) >= 2:
+                    word, definition = parts
+                    if word not in all_definitions:
+                        new_definitions_count += 1
+                    all_definitions[word] = definition
+        
+        # Écrire toutes les définitions fusionnées
+        with open(accumulated_clean_fn, 'w') as f:
+            for word, definition in all_definitions.items():
+                f.write(f"{word} {definition}\n")
+        
+        print(f"Ajouté {new_definitions_count} nouvelles définitions")
+        print(f"-> {len(all_definitions)} définitions au total écrites dans {accumulated_clean_fn}")
+        
         # For next iteration, extract new words from cleaned definitions if not the last iteration
         if current_iteration < max_iterations and (not max_definitions or all_definitions_count < max_definitions):
             print("\nExtracting new words for the next iteration...")
             new_vocabulary = set()
-            with open(clean_output_fn, 'r') as f:
+            original_words = set()
+            
+            # Collecter les mots depuis les définitions accumulées au lieu du fichier de l'itération courante
+            with open(accumulated_clean_fn, 'r') as f:
                 for line in f:
                     parts = line.strip().split()
-                    if len(parts) >= 2:  # word definition...
-                        # Words 1+ are the definition words
-                        new_vocabulary.update(parts[1:])
+                    if len(parts) >= 1:
+                        original_words.add(parts[0])  # Le mot défini
+                        if len(parts) >= 2:
+                            new_vocabulary.update(parts[1:])  # Les mots de la définition
             
-            # Filter out already processed words
-            new_vocabulary = new_vocabulary - all_processed_words
+            # Filter out already processed words, sauf les mots originaux
+            new_vocabulary = (new_vocabulary - all_processed_words)
             
             # Create a temporary file for the new vocabulary
             next_input_file = join(temp_dir, f"iter{current_iteration+1}-vocabulary.txt")
@@ -422,17 +471,13 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
     if not exists(output_dir):
         os.makedirs(output_dir)
     
-    # Copy final iteration files to output directory
+    # Copy final accumulated definitions file to output directory
     final_definitions = join(output_dir, splitext(basename(filename))[0] + "-definitions.txt")
-    final_clean = join(output_dir, splitext(basename(filename))[0] + "-definitions-clean.txt")
     
     import shutil
-    if clean_output_fn and isfile(clean_output_fn):
-        shutil.copy2(clean_output_fn, final_clean)
-        print(f"\nFinal cleaned definitions copied to: {final_clean}")
-    if output_fn and isfile(output_fn):
-        shutil.copy2(output_fn, final_definitions)
-        print(f"Final raw definitions copied to: {final_definitions}")
+    if accumulated_clean_fn and isfile(accumulated_clean_fn):
+        shutil.copy2(accumulated_clean_fn, final_definitions)
+        print(f"\nFinal accumulated definitions copied to: {final_definitions}")
     
     total_time = time.time() - globalStart
     print(f"\nVocabulary expansion complete:")
