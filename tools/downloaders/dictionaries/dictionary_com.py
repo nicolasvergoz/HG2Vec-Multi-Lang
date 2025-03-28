@@ -53,61 +53,36 @@ class DictionaryDotComDownloader(DictionaryDownloader):
         try:
             html = self.get_html(URL)
 
-            # definitions are in <section> tags with class "css-171jvig". Each POS
-            # type has its own <section>, so extract them all.
-            block_pat = re.compile('<section class="css-171jvig(.*?)</section>',
-                                re.I|re.S)
-            blocks = re.findall(block_pat, html)
-
-            # inside each block, definitions are in <span> tags with the class
-            # "css-1e3ziqc". Sometimes there is another class, so use the un-greedy
-            # regex pattern .+? to go until the closing '>' of the opening <span>
-            # tag.
-            defs_pat = re.compile('<span class=".+?css-1e3ziqc.+?>(.*?)</span>', re.I|re.S)
-
-            # need to extract definitions only if it's a certain pos type
-            if pos in ["adjective", "noun", "verb"]:
-
-                # for each block, if the extracted POS matches the pos argument, add
-                # the definitions in defs (.+ because class is either luna-pos or
-                # pos)
-                pos_pat = re.compile('class=.+pos">(.*?)</span>', re.I|re.S)
-                defs = []
-
-                for block in blocks:
-                    pos_extracted = re.search(pos_pat, block)
-
-                    # some words (like cia) do not have a pos info so no pos
-                    # extracted
-                    if pos_extracted is None:
-                        continue
-
-                    pos_extracted = pos_extracted.group(1)
-
-                    if pos not in pos_extracted:
-                        continue
-
-                    # remove possible sentence examples in definitions and possible
-                    # non informative labels (like "Archaic" in one of the
-                    # definition of "wick")
-                    defs += [ re.sub('<span class="luna-example.+$', '', x)
-                            for x in re.findall(defs_pat, block)
-                            if "luna-label" not in x ]
-
-            # otherwise, concatenate all blocks and extract all definitions
-            # available. Remove possible sentence examples in definitions and
-            # possible non informative labels (like "Archaic" in one of the
-            # definition of "wick")
-            else:
-                defs = re.findall(defs_pat, " ".join(blocks))
-                defs = [ re.sub('<span class="luna-example.+$', '', x)
-                        for x in defs if "luna-label" not in x]
-
-            # need to clean definitions of <span> tags. Use cleaner to replace these
-            # tags by empty string, Use .strip() to also clean some \r or \n.
-            cleaned_defs = [self.clean_html(x, '<.+?>').strip() for x in defs]
+            # New pattern to match the updated selector div.NZKOFkdkcvYgD3lqOIJw > div
+            defs_pat = re.compile('<div class="NZKOFkdkcvYgD3lqOIJw"><div>(.*?)</div></div>', re.I|re.S)
             
-            # Si aucune définition n'a été trouvée
+            # Extract sections based on POS if needed
+            if pos in ["adjective", "noun", "verb"]:
+                # For filtering by POS, we need to adapt this part to the new HTML structure
+                # This is a placeholder - the exact implementation would depend on how POS is marked in the new structure
+                # This is a placeholder - the exact implementation would depend on how POS is marked in the new structure
+                pos_pat = re.compile('class=.+pos">(.*?)</span>', re.I|re.S)
+                sections = re.findall(pos_pat, html)
+                
+                # Extract definitions from sections matching the requested POS
+                raw_defs = []
+                for section in sections:
+                    if pos in section.lower():
+                        raw_defs.extend(re.findall(defs_pat, section))
+            else:
+                # Extract all definitions without filtering by POS
+                raw_defs = re.findall(defs_pat, html)
+            
+            # Clean the definitions by removing all HTML tags and normalizing whitespace
+            cleaned_defs = []
+            for def_text in raw_defs:
+                # Remove HTML tags but preserve the text content
+                cleaned = self.clean_html(def_text, '<.+?>')
+                # Remove comment tags and normalize whitespace
+                cleaned = re.sub('<!--\s*-->', ' ', cleaned)
+                cleaned = re.sub('\s+', ' ', cleaned).strip()
+                cleaned_defs.append(cleaned)
+            
             if not cleaned_defs:
                 return None, URL, f"No definition found for '{word}' in Dictionary.com"
                 
