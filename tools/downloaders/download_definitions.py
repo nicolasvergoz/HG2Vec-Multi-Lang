@@ -132,7 +132,7 @@ class ThreadWrite(Thread):
                 msg = self.msg_queue.get()
                 self.of.write(msg + "\n")
 
-        # Vider la queue avant de terminer
+        # Empty the queue before terminating
         while True:
             try:
                 msg = self.msg_queue.get(True, 5)
@@ -327,7 +327,7 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
                 if all_queues_empty:
                     break
                 
-                # Vérifier si on a atteint le nombre maximum de définitions
+                # Check if we have reached the maximum number of definitions
                 current_definitions_count = sum(download_counter.values())
                 if max_definitions and (all_definitions_count + current_definitions_count) >= max_definitions:
                     print(f"\nMaximum number of definitions reached ({max_definitions})")
@@ -344,7 +344,7 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
                         print('\r{0}%'.format(tmp), end="")
                         percent = tmp
                 
-                # Dormir un peu pour éviter de surcharger le CPU
+                # Sleep a bit to avoid overloading the CPU
                 time.sleep(0.1)
                 
         except KeyboardInterrupt:
@@ -361,7 +361,7 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
         # 5. get total time and some results infos.
         print("Iteration time: {:.2f} sec\n".format(time.time() - globalStart))
         
-        # Écrire les mots non trouvés dans un fichier séparé
+        # Write the words not found in a separate file
         if len(not_found_words) > 0:
             with open(not_found_fn, "w") as nf:
                 for item in not_found_words:
@@ -385,7 +385,7 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
                         else:  # Format simple (mot)
                             nf.write(f"{item[0]}\n")
                     else:
-                        # Pour la compatibilité avec l'ancien format
+                        # For compatibility with the old format
                         nf.write(f"{item}\n")
             print(f"Words without definitions: {len(not_found_words)}")
             print(f"List of words without definitions written to: {not_found_fn}")
