@@ -37,7 +37,16 @@ STANDARD_SHORT_CODES = {
     "larousse": "Lar"
 }
 
-# Correspondance inverse pour la recherche par code court
+# Standard definition of short codes and names
+STANDARD_SHORT_CODES = {
+    "cambridge": "Cam",
+    "collins": "Col",
+    "dictionary": "Dic",
+    "robert": "Rob",
+    "larousse": "Lar"
+}
+
+# Reverse mapping for lookup by short code
 STANDARD_NAMES = {v: k for k, v in STANDARD_SHORT_CODES.items()}
 
 class DictionaryDownloader:
@@ -60,17 +69,17 @@ class DictionaryDownloader:
         }
     
     def __eq__(self, other):
-        """Compare dictionnaires par leur short_code pour éviter les confusions.
+        """Compare dictionaries by their short_code to avoid confusion.
         
         Args:
-            other: L'autre objet à comparer
+            other: The other object to compare with
             
         Returns:
-            bool: True si les two dictionnaires ont le même short_code, False sinon
+            bool: True if the two dictionaries have the same short_code, False otherwise
         """
         if isinstance(other, DictionaryDownloader):
             return self.short_code == other.short_code
-        # Comparaison avec un string (soit nom, soit code court)
+        # Comparison with a string (either name or short code)
         elif isinstance(other, str):
             return (self.short_code == other or 
                     self.name == other or 
@@ -79,16 +88,16 @@ class DictionaryDownloader:
         return False
     
     def __hash__(self):
-        """Hachage basé sur le short_code pour que l'objet soit utilisable comme clé de dictionnaire."""
+        """Hash based on short_code so the object can be used as a dictionary key."""
         return hash(self.short_code)
     
     @abstractmethod
     def download(self, word, pos="all"):
         """Download definitions for the given word.
         
-        Tous les dictionnaires doivent retourner le même format: un tuple (definitions, url, error_msg)
-        - Si des définitions sont trouvées: (list_of_definitions, None, None)
-        - Si aucune définition n'est trouvée: (None, url, error_msg)
+        All dictionaries must return the same format: a tuple (definitions, url, error_msg)
+        - If definitions are found: (list_of_definitions, None, None)
+        - If no definition is found: (None, url, error_msg)
         
         Args:
             word (str): The word to look up
@@ -96,9 +105,9 @@ class DictionaryDownloader:
             
         Returns:
             tuple: (definitions, url, error_msg)
-                  - definitions: liste des définitions trouvées ou None si aucune
-                  - url: URL consultée pour trouver les définitions ou None
-                  - error_msg: Message d'erreur ou None si aucune erreur
+                  - definitions: list of definitions found or None if none
+                  - url: URL consulted to find definitions or None
+                  - error_msg: Error message or None if no error
         """
         pass
     
@@ -118,24 +127,24 @@ class DictionaryDownloader:
         req = urllib.request.Request(url, headers=self.headers)
         response = urllib.request.urlopen(req)
         
-        # Vérifier si la réponse est compressée avec gzip
+        # Check if the response is compressed with gzip
         if response.info().get('Content-Encoding') == 'gzip':
             content = gzip.decompress(response.read())
         else:
             content = response.read()
         
-        # Essayer d'abord l'encodage utf-8 (cas le plus courant)
+        # Try utf-8 encoding first (most common case)
         try:
             return content.decode('utf-8')
         except UnicodeDecodeError:
-            # Si utf-8 échoue, essayer d'autres encodages courants
+            # If utf-8 fails, try other common encodings
             for encoding in ['latin-1', 'iso-8859-1', 'windows-1252']:
                 try:
                     return content.decode(encoding)
                 except UnicodeDecodeError:
                     continue
             
-            # En dernier recours, utiliser utf-8 avec remplacement des caractères invalides
+            # As a last resort, use utf-8 with replacement of invalid characters
             return content.decode('utf-8', errors='replace')
     
     def clean_html(self, html, pattern):
@@ -153,49 +162,49 @@ class DictionaryDownloader:
     
     @staticmethod
     def get_standard_short_code(name_or_code):
-        """Convertit un nom ou un code court en code court standard.
+        """Convert a name or short code to a standard short code.
         
         Args:
-            name_or_code (str): Nom du dictionnaire ou code court
+            name_or_code (str): Dictionary name or short code
             
         Returns:
-            str: Code court standard
+            str: Standard short code
         """
         if name_or_code in STANDARD_SHORT_CODES:
             return STANDARD_SHORT_CODES[name_or_code]
         if name_or_code in STANDARD_NAMES:
             return name_or_code
-        return name_or_code  # Si ni l'un ni l'autre, retourne la valeur d'origine
+        return name_or_code  # If neither, return the original value
     
     @staticmethod
     def get_standard_name(name_or_code):
-        """Convertit un nom ou un code court en nom standard.
+        """Convert a name or short code to a standard name.
         
         Args:
-            name_or_code (str): Nom du dictionnaire ou code court
+            name_or_code (str): Dictionary name or short code
             
         Returns:
-            str: Nom standard
+            str: Standard name
         """
         if name_or_code in STANDARD_NAMES:
             return STANDARD_NAMES[name_or_code]
         if name_or_code in STANDARD_SHORT_CODES:
             return name_or_code
-        return name_or_code  # Si ni l'un ni l'autre, retourne la valeur d'origine
+        return name_or_code  # If neither, return the original value
 
 
 def remove_diacritics(text):
     """
-    Supprime les accents et autres caractères diacritiques d'un texte.
-    Par exemple: 'été' -> 'ete', 'çà' -> 'ca', 'où' -> 'ou'
+    Removes accents and other diacritical marks from text.
+    For example: 'été' -> 'ete', 'çà' -> 'ca', 'où' -> 'ou'
     
     Args:
-        text (str): Texte avec diacritiques
+        text (str): Text with diacritics
         
     Returns:
-        str: Texte sans diacritiques
+        str: Text without diacritics
     """
-    # Normalise le texte: décompose les caractères accentués en caractère de base + accent
+    # Normalize the text: decompose accented characters into base character + accent
     normalized = unicodedata.normalize('NFKD', text)
-    # Filtre tous les caractères qui ne sont pas des lettres ASCII, des chiffres ou des caractères spéciaux simples
+    # Filter out all characters that are not ASCII letters, numbers, or simple special characters
     return ''.join([c for c in normalized if not unicodedata.combining(c)]) 

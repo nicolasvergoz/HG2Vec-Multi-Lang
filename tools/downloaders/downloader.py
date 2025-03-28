@@ -22,7 +22,7 @@
 import string
 from dictionaries import get_downloader, DictionaryDownloader
 
-# Chargement des stopwords anglais
+# Load English stopwords
 STOPWORDS_EN = set()
 try:
     with open('dict-dl/stopwords_en.txt') as f:
@@ -31,7 +31,7 @@ try:
 except FileNotFoundError:
     print("WARNING: English stopwords file not found")
 
-# Chargement des stopwords français
+# Load French stopwords
 STOPWORDS_FR = set()
 try:
     with open('dict-dl/stopwords_fr.txt') as f:
@@ -56,30 +56,30 @@ def download_word_definition(dict_name, word, pos="all", clean=True):
 
     Returns:
         list: definitions of WORD according to POS
-        tuple(None, str, str): si le mot n'a pas de définition ou erreur
+        tuple(None, str, str): if the word has no definition or error
     """
     try:
-        # Get the appropriate downloader - on utilise le nom ou le code court
+        # Get the appropriate downloader - use the name or short code
         downloader = get_downloader(dict_name)
                 
         # cleanup the word
-        original_word = word  # Garder le mot original pour les messages d'erreur
+        original_word = word  # Keep the original word for error messages
         if clean:
             # remove trailing punctuation and make it lowercase
             for p in string.punctuation:
                 word = word.replace(p, "")
             word = word.lower()
                 
-        # Obtenir les définitions - format standardisé (definitions, url, error_msg)
+        # Get definitions - standardized format (definitions, url, error_msg)
         definitions, url, error_msg = downloader.download(word, pos)
         
-        # Si aucune définition n'est trouvée, on retourne le tuple d'erreur
+        # If no definition is found, return the error tuple
         if definitions is None:
             return None, url, error_msg
         
-        # Si on est arrivé ici, c'est qu'on a des définitions
+        # If we got here, we have definitions
         words = []
-        # Sélectionner le set de stopwords approprié selon le dictionnaire
+        # Select the appropriate stopwords set based on the dictionary
         stopwords = STOPWORDS_EN
         if downloader.language == "fr":
             stopwords = STOPWORDS_FR
@@ -90,21 +90,21 @@ def download_word_definition(dict_name, word, pos="all", clean=True):
                 words.append(definition)
                 continue
 
-            # Pour le français, traiter spécialement les apostrophes
+            # For French, handle apostrophes specially
             if downloader.language == "fr":
-                # Pré-traitement: remplacer les apostrophes par un espace + le mot
-                # Exemple: "l'une" devient "l une" au lieu de "lune"
+                # Pre-processing: replace apostrophes with space + word
+                # Example: "l'une" becomes "l une" instead of "lune"
                 processed_def = definition.replace("'", " ")
-                processed_def = processed_def.replace("'", " ")  # Apostrophe typographique
+                processed_def = processed_def.replace("'", " ")  # Typographic apostrophe
                 
-                # Découper la définition en mots en utilisant les espaces
+                # Split definition into words using spaces
                 for word in processed_def.split():
-                    # Nettoyer chaque mot en gardant les accents mais en retirant les caractères non-alphabétiques
+                    # Clean each word keeping accents but removing non-alphabetic characters
                     word = ''.join([c.lower() for c in word if c.isalpha()])
                     if word and word not in stopwords:
                         words.append(word)
             else:
-                # Pour l'anglais, continuer avec le traitement existant
+                # For English, continue with existing processing
                 for word in definition.split():
                     word = ''.join([c.lower() for c in word if c.isalpha() and ord(c) < 128])
                     if word and word not in stopwords:
@@ -113,15 +113,15 @@ def download_word_definition(dict_name, word, pos="all", clean=True):
         return words
         
     except Exception as e:
-        # Toutes les erreurs sont considérées comme non fatales
+        # All errors are considered non-fatal
         dict_name_display = dict_name
         try:
-            # Si on a pu obtenir le downloader, utiliser son nom complet
+            # If we could get the downloader, use its full name
             dict_name_display = downloader.name
         except:
             pass
             
-        error_msg = f"Erreur pour '{original_word}' dans {dict_name_display}: {str(e)}"
+        error_msg = f"Error for '{original_word}' in {dict_name_display}: {str(e)}"
         print(f"\nWARNING: Error for '{original_word}' in {dict_name_display}: {str(e)}")
         
         return None, "", error_msg
@@ -137,25 +137,8 @@ if __name__ == '__main__':
     print("\nLe Robert")
     print(download_word_definition("robert", "chat", "all"))
 
-    print("\n\n-- TEST : definitions according to POS of alert --")
-    print("dictionary.com -- alert [ADJECTIVE]")
-    print(download_word_definition("dictionary", "alert", "adjective"))
-    print()
-    print("dictionary.com -- alert [NOUN]")
-    print(download_word_definition("dictionary", "alert", "noun"))
-    print()
-    print("dictionary.com -- alert [VERB]")
-    print(download_word_definition("dictionary", "alert", "verb"))
-    print()
-    print("dictionary.com -- alert [ALL]")
-    print(download_word_definition("dictionary", "alert", "all"))
-    print()
-    print("Le Robert -- chat [nom]")
-    print(download_word_definition("robert", "chat", "nom"))
-    print()
-
     # Test des méthodes de comparaison
-    print("\n-- TEST : comparaison des objets dictionnaires --")
+    print("\n-- TEST : comparison of dictionary objects --")
     cambridge = get_downloader("cambridge")
     cam_code = get_downloader("Cam")
     print(f"cambridge == Cam: {cambridge == cam_code}")

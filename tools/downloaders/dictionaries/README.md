@@ -2,12 +2,42 @@
 
 This package contains modular dictionary downloaders for retrieving word definitions from various online dictionaries.
 
+## Usage
+
+To download definitions from dictionaries, use the `download_definitions.py` script:
+
+```bash
+python tools/downloaders/download_definitions.py data/input/test_words_fr.txt -lang fr -l 2 -s data/input/stopwords_fr.txt -i 2 -m 100
+```
+
+### Command Line Arguments
+
+- `input_file`: Path to a file containing a list of words (one per line)
+- `-lang`: Language code - 'en' for English or 'fr' for French (default: 'en')
+- `-pos`: Part of speech - 'noun', 'verb', 'adjective' or 'all' (default: 'all')
+- `-out`: Output directory for definition files (default: 'data/output/definitions')
+- `-l` / `--min-length`: Minimum word length to keep in definitions (default: 1)
+- `-s` / `--stopwords`: Path to a stopwords file for filtering (optional)
+- `--no-stopwords`: Disable stopwords filtering
+- `-i` / `--iterations`: Number of vocabulary expansion iterations (default: 1)
+- `-m` / `--max-definitions`: Maximum number of definitions to download across all iterations (optional)
+
+### Process Overview
+
+The script follows these steps:
+1. Reads the input file to get the initial vocabulary
+2. Downloads definitions for each word from the selected dictionaries
+3. Cleans and processes the definitions
+4. Optionally extracts new words from definitions for additional iterations
+5. Outputs a final file with all accumulated definitions
+
 ## Current Dictionaries
 
 - **Cambridge** (`Cam`) - English definitions from Cambridge Dictionary
 - **Dictionary.com** (`Dic`) - English definitions from Dictionary.com
 - **Collins** (`Col`) - English definitions from Collins Dictionary
-- **Le Robert** (`robert`) - French definitions from Le Robert Dictionary
+- **Le Robert** (`Rob`) - French definitions from Le Robert Dictionary
+- **Larousse** (`Lar`) - French definitions from Larousse Dictionary
 
 ## How to Add a New Dictionary
 
@@ -47,8 +77,10 @@ class MerriamWebsterDownloader(DictionaryDownloader):
             pos (str): Part of speech filter (default: "all")
             
         Returns:
-            list: Definitions for the word
-            -1: If word not found or error
+            tuple: (definitions, url, error_msg)
+                  - definitions: list of definitions found or None if none
+                  - url: URL consulted to find definitions or None
+                  - error_msg: Error message or None if no error
         """
         URL = "https://www.merriam-webster.com/dictionary/" + word
         
@@ -64,14 +96,14 @@ class MerriamWebsterDownloader(DictionaryDownloader):
             # Extract definitions
             # ...
             
-            return definitions
+            return definitions, None, None
             
-        except HTTPError:
-            return -1
+        except HTTPError as e:
+            error_msg = f"HTTP error {e.code} for '{word}'"
+            return None, URL, error_msg
         except Exception as e:
-            print(f"\nERROR: * error when downloading from Merriam-Webster.")
-            print(f"       * retry Merriam-Webster - {word}")
-            return -1
+            error_msg = f"Error for '{word}': {str(e)}"
+            return None, URL, error_msg
 ```
 
 4. Add an instance of your downloader at the end of the file:
@@ -109,8 +141,8 @@ That's it! Your new dictionary downloader will be automatically available for us
 
 ## Return Values
 
-Dictionary downloaders should return:
-
-- A list of definitions if found
-- `-1` for English dictionaries if the word is not found or an error occurs
-- A tuple `(None, url, error_message)` for French dictionaries if the word is not found or an error occurs 
+Dictionary downloaders should return a tuple with three elements:
+- `(definitions, url, error_msg)` where:
+  - `definitions`: A list of definitions if found, or None if not found
+  - `url`: The URL consulted (for error reporting) or None
+  - `error_msg`: Error message if there was an error, or None 

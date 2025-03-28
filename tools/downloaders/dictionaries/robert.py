@@ -36,18 +36,18 @@ class RobertDownloader(DictionaryDownloader):
         self.headers['Accept-Language'] = 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
     
     def download(self, word, pos="all"):
-        """Télécharge les définitions du mot depuis le dictionnaire Le Robert.
+        """Downloads word definitions from Le Robert dictionary.
         
         Args:
-            word (str): le mot dont on veut télécharger la définition
-            pos (str): partie du discours. Si différent de 'all', ne retourne
-                    que les définitions pour cette partie du discours.
+            word (str): the word to look up
+            pos (str): part of speech. If different from 'all', returns
+                    only definitions for this part of speech.
                     
         Returns:
             tuple: (definitions, url, error_msg)
-                  - definitions: liste des définitions trouvées ou None si aucune
-                  - url: URL consultée pour trouver les définitions ou None
-                  - error_msg: Message d'erreur ou None si aucune erreur
+                  - definitions: list of definitions found or None if none
+                  - url: URL consulted to find definitions or None
+                  - error_msg: Error message or None if no error
         """
         # Encode URL with special characters
         # First remove diacritics to improve URL compatibility
@@ -64,7 +64,7 @@ class RobertDownloader(DictionaryDownloader):
         # URL actually used (will be updated if we use the fallback)
         used_url = URL
 
-        # Le Robert a des catégories grammaticales en français
+        # Le Robert has grammatical categories in French
         if pos != "all" and pos not in ["nom", "verbe", "adjectif", "adverbe"]:
             pos = "all"
 
@@ -72,12 +72,12 @@ class RobertDownloader(DictionaryDownloader):
             # Try first with the normalized word (without diacritics)
             html = self.get_html(URL)
             
-            # Utiliser BeautifulSoup pour parser le HTML
+            # Use BeautifulSoup to parse the HTML
             soup = BeautifulSoup(html, 'html.parser')
             
-            # Vérifier si le mot existe
+            # Check if the word exists
             if soup.find("section", class_="def") is None:
-                # Si le mot n'existe pas avec version sans diacritiques, essayer avec la version originale
+                # If the word doesn't exist with the version without diacritics, try with the original version
                 if normalized_word != word:
                     print(f"\nINFO: Trying alternative URL with original spelling for '{word}'")
                     try:
@@ -86,68 +86,68 @@ class RobertDownloader(DictionaryDownloader):
                         used_url = fallback_url
                         
                         if soup.find("section", class_="def") is None:
-                            # Mot non trouvé - ce n'est pas une erreur fatale
-                            error_msg = f"Mot '{word}' non trouvé dans Le Robert"
+                            # Word not found - this is not a fatal error
+                            error_msg = f"Word '{word}' not found in Le Robert"
                             print(f"\nWARNING: '{word}' not found in Le Robert dictionary.")
                             return None, used_url, error_msg
                     except HTTPError as e:
-                        # Mot non trouvé - ce n'est pas une erreur fatale
-                        error_msg = f"HTTP Error {e.code} lors de l'accès à la page avec accents"
+                        # Word not found - this is not a fatal error
+                        error_msg = f"HTTP Error {e.code} when accessing the page with accents"
                         print(f"\nWARNING: '{word}' not found in Le Robert dictionary.")
                         return None, fallback_url, error_msg
                     except Exception as e:
-                        # Toute autre erreur - ce n'est pas une erreur fatale
-                        error_msg = f"Erreur lors de l'accès à la page avec accents: {str(e)}"
+                        # Any other error - this is not a fatal error
+                        error_msg = f"Error when accessing the page with accents: {str(e)}"
                         print(f"\nWARNING: Error for '{word}' in Le Robert: {str(e)}")
                         return None, fallback_url, error_msg
                 else:
-                    # Mot non trouvé - ce n'est pas une erreur fatale
-                    error_msg = f"Mot '{word}' non trouvé dans Le Robert"
+                    # Word not found - this is not a fatal error
+                    error_msg = f"Word '{word}' not found in Le Robert"
                     print(f"\nWARNING: '{word}' not found in Le Robert dictionary.")
                     return None, used_url, error_msg
                 
             definitions = []
             
-            # Extraire toutes les définitions
+            # Extract all definitions
             if pos == "all":
-                # Trouver toutes les sections de définition
+                # Find all definition sections
                 for section in soup.find_all("section", class_="def"):
-                    # Pour chaque section, trouver toutes les définitions avec la classe d_dfn
+                    # For each section, find all definitions with the d_dfn class
                     for def_entry in section.find_all(class_="d_dfn"):
                         definition_text = def_entry.get_text().strip()
                         if definition_text:
                             definitions.append(definition_text)
                             
-                    # Chercher également les définitions dans les éléments avec la classe d_gls
+                    # Also look for definitions in elements with the d_gls class
                     for gls_entry in section.find_all(class_="d_gls"):
                         gls_text = gls_entry.get_text().strip()
                         if gls_text:
                             definitions.append(gls_text)
             else:
-                # Chercher uniquement les définitions correspondant à la partie du discours demandée
+                # Look only for definitions corresponding to the requested part of speech
                 for section in soup.find_all("section", class_="def"):
-                    # Vérifier la partie du discours
+                    # Check the part of speech
                     pos_element = section.find(class_="cat")
                     if pos_element and pos.lower() in pos_element.get_text().lower():
-                        # Chercher les définitions avec la classe d_dfn
+                        # Look for definitions with the d_dfn class
                         for def_entry in section.find_all(class_="d_dfn"):
                             definition_text = def_entry.get_text().strip()
                             if definition_text:
                                 definitions.append(definition_text)
                         
-                        # Chercher également les définitions dans les éléments avec la classe d_gls
+                        # Also look for definitions in elements with the d_gls class
                         for gls_entry in section.find_all(class_="d_gls"):
                             gls_text = gls_entry.get_text().strip()
                             if gls_text:
                                 definitions.append(gls_text)
             
-            # Si aucune définition n'est trouvée
+            # If no definition is found
             if len(definitions) == 0:
-                # Définition non trouvée - ce n'est pas une erreur fatale
-                error_msg = f"Aucune définition trouvée pour '{word}'"
+                # Definition not found - this is not a fatal error
+                error_msg = f"No definition found for '{word}'"
                 if pos != "all":
-                    error_msg += f" en tant que {pos}"
-                error_msg += " dans Le Robert."
+                    error_msg += f" as {pos}"
+                error_msg += " in Le Robert."
                 
                 warning_msg = f"No definition found for '{word}'"
                 if pos != "all":
@@ -159,7 +159,7 @@ class RobertDownloader(DictionaryDownloader):
             return definitions, None, None
             
         except HTTPError as e:
-            # Toutes les erreurs HTTP sont considérées comme non fatales
+            # All HTTP errors are considered non-fatal
             error_type = {
                 404: "not found",
                 504: "Gateway Timeout",
@@ -167,17 +167,17 @@ class RobertDownloader(DictionaryDownloader):
                 503: "Service Unavailable"
             }.get(e.code, f"HTTP error {e.code}")
             
-            error_msg = f"Error {e.code}: {error_type} pour '{word}'"
+            error_msg = f"Error {e.code}: {error_type} for '{word}'"
             print(f"\nWARNING: HTTP error ({e.code}: {error_type}) for '{word}' in Le Robert.")
             return None, used_url, error_msg
             
         except UnicodeDecodeError as e:
-            error_msg = f"Unicode decode error pour '{word}': {str(e)}"
+            error_msg = f"Unicode decode error for '{word}': {str(e)}"
             print(f"\nWARNING: Unicode decode error for '{word}' in Le Robert.")
             return None, used_url, error_msg
             
         except Exception as e:
-            error_msg = f"Erreur technique pour '{word}': {str(e)}"
+            error_msg = f"Technical error for '{word}': {str(e)}"
             print(f"\nWARNING: Error for '{word}' in Le Robert: {str(e)}")
             return None, used_url, error_msg
 

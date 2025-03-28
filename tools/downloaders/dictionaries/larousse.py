@@ -36,18 +36,18 @@ class LarousseDownloader(DictionaryDownloader):
         self.headers['Accept-Language'] = 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
     
     def download(self, word, pos="all"):
-        """Télécharge les définitions du mot depuis le dictionnaire Larousse.
+        """Downloads word definitions from the Larousse dictionary.
         
         Args:
-            word (str): le mot dont on veut télécharger la définition
-            pos (str): partie du discours. Si différent de 'all', ne retourne
-                    que les définitions pour cette partie du discours.
+            word (str): the word to look up
+            pos (str): part of speech. If different from 'all', returns
+                    only definitions for this part of speech.
                     
         Returns:
             tuple: (definitions, url, error_msg)
-                  - definitions: liste des définitions trouvées ou None si aucune
-                  - url: URL consultée pour trouver les définitions ou None
-                  - error_msg: Message d'erreur ou None si aucune erreur
+                  - definitions: list of definitions found or None if none
+                  - url: URL consulted to find definitions or None
+                  - error_msg: Error message or None if no error
         """
         # Encode URL with special characters
         encoded_word = urllib.parse.quote(word)
@@ -55,61 +55,61 @@ class LarousseDownloader(DictionaryDownloader):
         URL = "https://www.larousse.fr/dictionnaires/francais/" + encoded_word
         used_url = URL
 
-        # Larousse a des catégories grammaticales en français
+        # Larousse has grammatical categories in French
         if pos != "all" and pos not in ["nom", "verbe", "adjectif", "adverbe"]:
             pos = "all"
 
         try:
             html = self.get_html(URL)
             
-            # Utiliser BeautifulSoup pour parser le HTML
+            # Use BeautifulSoup to parse the HTML
             soup = BeautifulSoup(html, 'html.parser')
             
-            # Vérifier si le mot existe
+            # Check if the word exists
             definitions_list = soup.select('ul.Definitions > li.DivisionDefinition')
             
             if not definitions_list:
-                # Mot non trouvé - ce n'est pas une erreur fatale
-                error_msg = f"Mot '{word}' non trouvé dans Larousse"
+                # Word not found - this is not a fatal error
+                error_msg = f"Word '{word}' not found in Larousse"
                 print(f"\nWARNING: '{word}' not found in Larousse dictionary.")
                 return None, used_url, error_msg
                 
             definitions = []
             
-            # Extraire toutes les définitions selon le sélecteur fourni
+            # Extract all definitions according to the provided selector
             for definition_element in definitions_list:
-                # Créer une copie de l'élément pour éviter de modifier l'original
+                # Create a copy of the element to avoid modifying the original
                 definition_copy = BeautifulSoup(str(definition_element), 'html.parser')
                 
-                # Supprimer toutes les balises span et leur contenu
+                # Remove all span tags and their content
                 for span in definition_copy.find_all('span'):
                     span.decompose()
                 
-                # Supprimer les paragraphes de synonymes et leurs contenus
+                # Remove synonym paragraphs and their content
                 for p in definition_copy.find_all('p', class_=['LibelleSynonyme', 'Synonymes']):
                     p.decompose()
                 
-                # Supprimer les exemples de définition
+                # Remove definition examples
                 for example in definition_copy.find_all(class_='ExempleDefinition'):
                     example.decompose()
                 
-                # Obtenir le texte nettoyé
+                # Get the cleaned text
                 clean_text = definition_copy.get_text().strip()
                 
-                # Nettoyer les espaces superflus
+                # Clean extra whitespace
                 clean_text = re.sub(r'\s+', ' ', clean_text).strip()
                 
-                # Ajouter la définition nettoyée
+                # Add the cleaned definition
                 if clean_text:
                     definitions.append(clean_text)
             
-            # Si aucune définition n'est trouvée
+            # If no definition is found
             if len(definitions) == 0:
-                # Définition non trouvée - ce n'est pas une erreur fatale
-                error_msg = f"Aucune définition trouvée pour '{word}'"
+                # Definition not found - this is not a fatal error
+                error_msg = f"No definition found for '{word}'"
                 if pos != "all":
-                    error_msg += f" en tant que {pos}"
-                error_msg += " dans Larousse."
+                    error_msg += f" as {pos}"
+                error_msg += " in Larousse."
                 
                 warning_msg = f"No definition found for '{word}'"
                 if pos != "all":
@@ -121,7 +121,7 @@ class LarousseDownloader(DictionaryDownloader):
             return definitions, None, None
             
         except HTTPError as e:
-            # Toutes les erreurs HTTP sont considérées comme non fatales
+            # All HTTP errors are considered non-fatal
             error_type = {
                 404: "not found",
                 504: "Gateway Timeout",
@@ -129,17 +129,17 @@ class LarousseDownloader(DictionaryDownloader):
                 503: "Service Unavailable"
             }.get(e.code, f"HTTP error {e.code}")
             
-            error_msg = f"Error {e.code}: {error_type} pour '{word}'"
+            error_msg = f"Error {e.code}: {error_type} for '{word}'"
             print(f"\nWARNING: HTTP error ({e.code}: {error_type}) for '{word}' in Larousse.")
             return None, used_url, error_msg
             
         except UnicodeDecodeError as e:
-            error_msg = f"Unicode decode error pour '{word}': {str(e)}"
+            error_msg = f"Unicode decode error for '{word}': {str(e)}"
             print(f"\nWARNING: Unicode decode error for '{word}' in Larousse.")
             return None, used_url, error_msg
             
         except Exception as e:
-            error_msg = f"Erreur technique pour '{word}': {str(e)}"
+            error_msg = f"Technical error for '{word}': {str(e)}"
             print(f"\nWARNING: Error for '{word}' in Larousse: {str(e)}")
             return None, used_url, error_msg
 

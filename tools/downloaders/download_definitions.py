@@ -36,14 +36,14 @@ from clean_definitions import clean_defs
 
 # global variables used (and shared) by all ThreadDown instances
 exitFlag = 0
-errorFlag = False  # Drapeau pour signaler les erreurs techniques
-notFoundLock = Lock()  # Lock pour la liste des mots non trouvés
+errorFlag = False  # Flag to signal technical errors
+notFoundLock = Lock()  # Lock for the list of words not found
 counterLock = Lock()
-errorLock = Lock()  # Lock pour la manipulation du drapeau d'erreur
-# Initialiser les compteurs avec les codes courts standard
+errorLock = Lock()  # Lock for error flag manipulation
+# Initialize counters with standard short codes
 request_counter = {}
 download_counter = {}
-not_found_words = []  # Liste pour stocker les mots non trouvés, leurs URLs et messages d'erreur
+not_found_words = []  # List to store words not found, their URLs and error messages
 
 class ThreadDown(Thread):
     """Class representing a thread that download definitions."""
@@ -66,25 +66,25 @@ class ThreadDown(Thread):
                     request_counter[self.dict_name] += 1
                     counterLock.release()
                     
-                    # Si le résultat est un tuple (None, url, error_msg), c'est un mot non trouvé avec son URL et message d'erreur
+                    # If the result is a tuple (None, url, error_msg), it's a word not found with its URL and error message
                     if isinstance(result, tuple) and result[0] is None:
-                        if len(result) >= 3:  # Format avec erreur (None, url, error_msg)
-                            # Mot non trouvé - l'enregistrer dans la liste avec son URL et message d'erreur
+                        if len(result) >= 3:  # Format with error (None, url, error_msg)
+                            # Word not found - add it to the list with its URL and error message
                             print(f"\nNOTE: No definition found for '{word}' in {self.dict_name} - adding to not-found list with URL and error message")
                             notFoundLock.acquire()
-                            not_found_words.append((word, result[1], result[2]))  # Tuple (mot, url, error_msg)
+                            not_found_words.append((word, result[1], result[2]))  # Tuple (word, url, error_msg)
                             notFoundLock.release()
-                        else:  # Format avec juste l'URL (None, url)
-                            # Mot non trouvé - l'enregistrer dans la liste avec son URL
+                        else:  # Format with just the URL (None, url)
+                            # Word not found - add it to the list with its URL
                             print(f"\nNOTE: No definition found for '{word}' in {self.dict_name} - adding to not-found list with URL")
                             notFoundLock.acquire()
-                            not_found_words.append((word, result[1], None))  # Tuple (mot, url, None)
+                            not_found_words.append((word, result[1], None))  # Tuple (word, url, None)
                             notFoundLock.release()
                     elif result is None:
-                        # Mot non trouvé - l'enregistrer dans la liste sans URL (pour les dictionnaires autres que Le Robert)
+                        # Word not found - add it to the list without URL (for dictionaries other than Le Robert)
                         print(f"\nNOTE: No definition found for '{word}' in {self.dict_name} - adding to not-found list")
                         notFoundLock.acquire()
-                        not_found_words.append((word, None, None))  # Tuple (mot, None, None)
+                        not_found_words.append((word, None, None))  # Tuple (word, None, None)
                         notFoundLock.release()
                     elif len(result) > 0:
                         # if len > 0, the downloaded definition contains at least
@@ -98,25 +98,25 @@ class ThreadDown(Thread):
                         # Format without dictionary prefix
                         self.res_queue.put("{} {}".format(word, " ".join(result)))
                     else:
-                        # Liste vide - pas de définition mais pas d'erreur technique
+                        # Empty list - no definition but no technical error
                         print(f"\nNOTE: Empty definition found for '{word}' in {self.dict_name} - adding to not-found list")
                         notFoundLock.acquire()
-                        not_found_words.append((word, None, "Définition vide"))  # Tuple (mot, None, erreur)
+                        not_found_words.append((word, None, "Empty definition"))  # Tuple (word, None, error)
                         notFoundLock.release()
                 except Exception as e:
-                    # Ne pas arrêter le processus, juste logguer l'erreur et continuer
-                    error_message = f"Exception technique: {str(e)}"
+                    # Don't stop the process, just log the error and continue
+                    error_message = f"Technical exception: {str(e)}"
                     print(f"\nWARNING: Failed to download definition for '{word}' from {self.dict_name}")
                     print(f"Exception: {str(e)}")
                     print("Continuing with next word...")
                     
-                    # Ajouter à la liste des mots non trouvés avec le message d'erreur
+                    # Add to the list of words not found with the error message
                     notFoundLock.acquire()
                     not_found_words.append((word, None, error_message))
                     notFoundLock.release()
                     
-                    # Ne pas mettre errorFlag à True pour ne pas arrêter les autres threads
-                    # On continue simplement avec le mot suivant
+                    # Don't set errorFlag to True to avoid stopping other threads
+                    # Just continue with the next word
 
 class ThreadWrite(Thread):
     """Class representing a thread that write definitions to a file."""
@@ -166,7 +166,7 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
     print("Language:", "French" if lang == "fr" else "English")
 
     # Determine the location of stopwords file based on language
-    final_stopwords_file = stopwords_file  # Utiliser le fichier spécifié en priorité
+    final_stopwords_file = stopwords_file
     if use_stopwords and not final_stopwords_file:
         # Base path for stopwords files - try different common locations
         potential_paths = [
@@ -208,9 +208,9 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
         # Generate iteration-specific filenames
         input_filename = basename(input_file)
         
-        # Vérifier si le nom de fichier d'entrée a déjà un préfixe d'itération
+        # Check if the input filename already has an iteration prefix
         if input_filename.startswith("iter"):
-            # Extraire la partie après le préfixe d'itération
+            # Extract the part after the iteration prefix
             match = re.match(r'iter\d+-(.+)', input_filename)
             if match:
                 base_name = match.group(1)
@@ -227,10 +227,10 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
         # Create filename for not found words
         not_found_fn = join(temp_dir, f"iter{current_iteration}-{base_name}-not-found.txt")
 
-        # Create filename for cleaned definitions - sans le préfixe "iter<N>-"
+        # Create filename for cleaned definitions - without the "iter<N>-" prefix
         clean_output_fn = join(temp_dir, f"{splitext(basename(output_fn))[0].replace(f'iter{current_iteration}-', '')}-clean.txt")
         
-        # Filename for accumulated definitions (conservé entre les itérations)
+        # Filename for accumulated definitions (preserved between iterations)
         accumulated_clean_fn = join(temp_dir, "accumulated-definitions-clean.txt")
         
         # Reset counter for this iteration
@@ -239,7 +239,7 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
         # Get the dictionary downloaders for the specified language
         language_downloaders = get_language_downloaders(lang)
         
-        # Initialiser les compteurs pour chaque dictionnaire
+        # Initialize counters for each dictionary
         for downloader in language_downloaders.values():
             request_counter[downloader.short_code] = 0
             download_counter[downloader.short_code] = 0
@@ -412,38 +412,38 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
         clean_defs(output_fn, clean_output_fn, "", min_word_length, final_stopwords_file)
         print(f"-> Cleaned definitions written in {clean_output_fn}")
         
-        # Fusionner les définitions nettoyées avec les définitions accumulées des itérations précédentes
-        print("\nFusionner avec les définitions des itérations précédentes...")
-        all_definitions = {}  # Dictionnaire pour stocker toutes les définitions (mot -> définition)
+        # Merge cleaned definitions with accumulated definitions from previous iterations
+        print("\nMerging with definitions from previous iterations...")
+        all_definitions = {}  # Dictionary to store all definitions (word -> definition)
         
-        # Lire les définitions existantes si elles existent
+        # Read existing definitions if they exist
         if isfile(accumulated_clean_fn):
             with open(accumulated_clean_fn, 'r') as f:
                 for line in f:
-                    parts = line.strip().split(' ', 1)  # Séparer le mot et sa définition
+                    parts = line.strip().split(' ', 1)  # Split the word and its definition
                     if len(parts) >= 2:
                         word, definition = parts
                         all_definitions[word] = definition
-            print(f"Chargé {len(all_definitions)} définitions existantes depuis {accumulated_clean_fn}")
+            print(f"Loaded {len(all_definitions)} existing definitions from {accumulated_clean_fn}")
         
-        # Ajouter les nouvelles définitions
+        # Add new definitions
         new_definitions_count = 0
         with open(clean_output_fn, 'r') as f:
             for line in f:
-                parts = line.strip().split(' ', 1)  # Séparer le mot et sa définition
+                parts = line.strip().split(' ', 1)  # Split the word and its definition
                 if len(parts) >= 2:
                     word, definition = parts
                     if word not in all_definitions:
                         new_definitions_count += 1
                     all_definitions[word] = definition
         
-        # Écrire toutes les définitions fusionnées
+        # Write all merged definitions
         with open(accumulated_clean_fn, 'w') as f:
             for word, definition in all_definitions.items():
                 f.write(f"{word} {definition}\n")
         
-        print(f"Ajouté {new_definitions_count} nouvelles définitions")
-        print(f"-> {len(all_definitions)} définitions au total écrites dans {accumulated_clean_fn}")
+        print(f"Added {new_definitions_count} new definitions")
+        print(f"-> {len(all_definitions)} total definitions written to {accumulated_clean_fn}")
         
         # For next iteration, extract new words from cleaned definitions if not the last iteration
         if current_iteration < max_iterations and (not max_definitions or all_definitions_count < max_definitions):
@@ -451,33 +451,33 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions", m
             new_vocabulary = set()
             original_words = set()
             
-            # Collecter les mots depuis les définitions accumulées au lieu du fichier de l'itération courante
+            # Collect words from accumulated definitions instead of the current iteration file
             with open(accumulated_clean_fn, 'r') as f:
                 for line in f:
                     parts = line.strip().split()
                     if len(parts) >= 1:
-                        original_words.add(parts[0])  # Le mot défini
+                        original_words.add(parts[0])  # The defined word
                         if len(parts) >= 2:
-                            new_vocabulary.update(parts[1:])  # Les mots de la définition
+                            new_vocabulary.update(parts[1:])  # The words in the definition
             
-            # Filter out already processed words, sauf les mots originaux
+            # Filter out already processed words
             new_vocabulary = (new_vocabulary - all_processed_words)
             
             # Create a temporary file for the new vocabulary
-            # Remplacer le préfixe d'itération existant au lieu de l'ajouter
+            # Replace existing iteration prefix instead of adding it
             base_filename = basename(input_file)
-            # Vérifier si le nom de fichier a déjà un préfixe d'itération
+            # Check if the filename already has an iteration prefix
             if base_filename.startswith(f"iter"):
-                # Extraire la partie après le préfixe d'itération (après "iter<n>-")
+                # Extract the part after the iteration prefix (after "iter<n>-")
                 match = re.match(r'iter\d+-(.+)', base_filename)
                 if match:
                     base_name = match.group(1)
                     next_input_file = join(temp_dir, f"iter{current_iteration+1}-{base_name}")
                 else:
-                    # Fallback si le pattern ne correspond pas
+                    # Fallback if the pattern doesn't match
                     next_input_file = join(temp_dir, f"iter{current_iteration+1}-vocabulary.txt")
             else:
-                # Pas de préfixe d'itération, ajouter le nouveau
+                # No iteration prefix, add the new one
                 next_input_file = join(temp_dir, f"iter{current_iteration+1}-{base_filename}")
             
             with open(next_input_file, 'w') as f:
