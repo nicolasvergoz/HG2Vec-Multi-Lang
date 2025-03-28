@@ -44,9 +44,10 @@ class RobertDownloader(DictionaryDownloader):
                     que les définitions pour cette partie du discours.
                     
         Returns:
-            tuple(list, None, None): liste des définitions si trouvées
-            tuple(None, str, str): si le mot n'a pas de définition ou en cas d'erreur,
-                                retourne (None, URL, message d'erreur)
+            tuple: (definitions, url, error_msg)
+                  - definitions: liste des définitions trouvées ou None si aucune
+                  - url: URL consultée pour trouver les définitions ou None
+                  - error_msg: Message d'erreur ou None si aucune erreur
         """
         # Encode URL with special characters
         # First remove diacritics to improve URL compatibility

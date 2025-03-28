@@ -40,8 +40,10 @@ class DictionaryDotComDownloader(DictionaryDownloader):
             pos (str): Part of speech filter (default: "all")
             
         Returns:
-            list: Definitions for the word
-            -1: If word not found or error
+            tuple: (definitions, url, error_msg)
+                  - definitions: liste des définitions trouvées ou None si aucune
+                  - url: URL consultée pour trouver les définitions ou None
+                  - error_msg: Message d'erreur ou None si aucune erreur
         """
         URL = "http://www.dictionary.com/browse/" + word
 
@@ -103,18 +105,28 @@ class DictionaryDotComDownloader(DictionaryDownloader):
 
             # need to clean definitions of <span> tags. Use cleaner to replace these
             # tags by empty string, Use .strip() to also clean some \r or \n.
-            return [self.clean_html(x, '<.+?>').strip() for x in defs]
+            cleaned_defs = [self.clean_html(x, '<.+?>').strip() for x in defs]
+            
+            # Si aucune définition n'a été trouvée
+            if not cleaned_defs:
+                return None, URL, f"No definition found for '{word}' in Dictionary.com"
+                
+            return cleaned_defs, None, None
 
-        except HTTPError:
-            return -1
-        except UnicodeDecodeError:
-            return -1
-        except IndexError:
-            return -1
+        except HTTPError as e:
+            error_msg = f"HTTP Error {e.code} for '{word}' in Dictionary.com"
+            return None, URL, error_msg
+        except UnicodeDecodeError as e:
+            error_msg = f"Unicode decode error for '{word}' in Dictionary.com: {str(e)}"
+            return None, URL, error_msg
+        except IndexError as e:
+            error_msg = f"Index error for '{word}' in Dictionary.com: {str(e)}"
+            return None, URL, error_msg
         except Exception as e:
+            error_msg = f"Error for '{word}' in Dictionary.com: {str(e)}"
             print("\nERROR: * timeout error.")
             print("       * retry dictionary.com -", word)
-            return -1
+            return None, URL, error_msg
 
 # Instance to be imported by the downloader module
 downloader = DictionaryDotComDownloader() 

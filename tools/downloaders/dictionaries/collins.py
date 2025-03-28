@@ -52,8 +52,10 @@ class CollinsDownloader(DictionaryDownloader):
             pos (str): Part of speech filter (default: "all")
             
         Returns:
-            list: Definitions for the word
-            -1: If word not found or error
+            tuple: (definitions, url, error_msg)
+                  - definitions: liste des définitions trouvées ou None si aucune
+                  - url: URL consultée pour trouver les définitions ou None
+                  - error_msg: Message d'erreur ou None si aucune erreur
         """
         URL = "https://www.collinsdictionary.com/dictionary/english/" + word
 
@@ -113,18 +115,27 @@ class CollinsDownloader(DictionaryDownloader):
             # replace these tags by empty string, Use .strip() to also clean some
             # \r or \n, and replace because sometimes there are \n inside a sentence
             cleaned_defs = [self.clean_html(x, '<.+?>').replace('\n', ' ').strip() for x in defs]
-            return cleaned_defs
 
-        except HTTPError:
-            return -1
-        except UnicodeDecodeError:
-            return -1
-        except IndexError:
-            return -1
+            # Si aucune définition n'a été trouvée
+            if not cleaned_defs:
+                return None, URL, f"No definition found for '{word}' in Collins dictionary"
+                
+            return cleaned_defs, None, None
+
+        except HTTPError as e:
+            error_msg = f"HTTP Error {e.code} for '{word}' in Collins dictionary"
+            return None, URL, error_msg
+        except UnicodeDecodeError as e:
+            error_msg = f"Unicode decode error for '{word}' in Collins dictionary: {str(e)}"
+            return None, URL, error_msg
+        except IndexError as e:
+            error_msg = f"Index error for '{word}' in Collins dictionary: {str(e)}"
+            return None, URL, error_msg
         except Exception as e:
+            error_msg = f"Error for '{word}' in Collins dictionary: {str(e)}"
             print("\nERROR: * timeout error.")
             print("       * retry Collins -", word)
-            return -1
+            return None, URL, error_msg
 
 # Instance to be imported by the downloader module
 downloader = CollinsDownloader() 

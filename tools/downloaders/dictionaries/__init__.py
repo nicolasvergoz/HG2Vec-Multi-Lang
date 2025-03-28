@@ -12,6 +12,7 @@ from .base import DictionaryDownloader, STANDARD_SHORT_CODES, STANDARD_NAMES
 from .cambridge import downloader as cambridge_downloader
 from .dictionary_com import downloader as dictionary_downloader
 from .collins import downloader as collins_downloader
+from .oxford import downloader as oxford_downloader
 from .robert import downloader as robert_downloader
 
 # Dictionary mapping short codes to downloaders
@@ -19,6 +20,7 @@ DICTIONARY_DOWNLOADERS = {
     "Cam": cambridge_downloader,
     "Dic": dictionary_downloader, 
     "Col": collins_downloader,
+    "Oxf": oxford_downloader,
     "Rob": robert_downloader
 }
 

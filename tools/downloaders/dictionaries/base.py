@@ -83,13 +83,19 @@ class DictionaryDownloader:
     def download(self, word, pos="all"):
         """Download definitions for the given word.
         
+        Tous les dictionnaires doivent retourner le même format: un tuple (definitions, url, error_msg)
+        - Si des définitions sont trouvées: (list_of_definitions, None, None)
+        - Si aucune définition n'est trouvée: (None, url, error_msg)
+        
         Args:
             word (str): The word to look up
             pos (str): Part of speech filter (default: "all")
             
         Returns:
-            list: Definitions for the word
-            -1: If word not found or error
+            tuple: (definitions, url, error_msg)
+                  - definitions: liste des définitions trouvées ou None si aucune
+                  - url: URL consultée pour trouver les définitions ou None
+                  - error_msg: Message d'erreur ou None si aucune erreur
         """
         pass
     

@@ -56,17 +56,12 @@ def download_word_definition(dict_name, word, pos="all", clean=True):
 
     Returns:
         list: definitions of WORD according to POS
-        tuple(None, str, str): si le mot n'a pas de définition ou erreur (pour 'robert')
-        None: si le mot n'a pas de définition (pour les autres dictionnaires)
-
+        tuple(None, str, str): si le mot n'a pas de définition ou erreur
     """
     try:
         # Get the appropriate downloader - on utilise le nom ou le code court
         downloader = get_downloader(dict_name)
-        
-        # On garde une référence au code court pour le traitement spécifique
-        short_code = downloader.short_code
-        
+                
         # cleanup the word
         original_word = word  # Garder le mot original pour les messages d'erreur
         if clean:
@@ -75,45 +70,21 @@ def download_word_definition(dict_name, word, pos="all", clean=True):
                 word = word.replace(p, "")
             word = word.lower()
                 
-        # Obtenir les définitions
-        result = downloader.download(word, pos)
+        # Obtenir les définitions - format standardisé (definitions, url, error_msg)
+        definitions, url, error_msg = downloader.download(word, pos)
         
-        # Cas spécial pour le dictionnaire Le Robert qui retourne un tuple (definitions, url, error_msg)
-        if short_code == "Rob":
-            if isinstance(result, tuple):
-                if len(result) == 3:  # Nouveau format avec message d'erreur
-                    definitions, url, error_msg = result
-                    if definitions is None:
-                        return None, url, error_msg
-                    # Sinon, on continue avec les définitions
-                    result = definitions
-                elif len(result) == 2:  # Ancien format sans message d'erreur
-                    definitions, url = result
-                    if definitions is None:
-                        return None, url, "Mot non trouvé (raison inconnue)"
-                    # Sinon, on continue avec les définitions
-                    result = definitions
+        # Si aucune définition n'est trouvée, on retourne le tuple d'erreur
+        if definitions is None:
+            return None, url, error_msg
         
-        # Pour les autres dictionnaires
-        # Si le résultat est None, mot non trouvé
-        if result is None:
-            if short_code == "Rob":
-                return None, "", f"Mot '{original_word}' non trouvé dans {downloader.name}"
-            return None
-            
-        # Harmonisation des codes d'erreur pour les autres dictionnaires
-        if result == -1: # Ancien format d'erreur (pas de définition)
-            if short_code == "Rob":
-                return None, "", f"Mot '{original_word}' non trouvé dans {downloader.name}"
-            return None
-            
+        # Si on est arrivé ici, c'est qu'on a des définitions
         words = []
         # Sélectionner le set de stopwords approprié selon le dictionnaire
         stopwords = STOPWORDS_EN
         if downloader.language == "fr":
             stopwords = STOPWORDS_FR
         
-        for definition in result: # there can be more than one definition fetched
+        for definition in definitions: # there can be more than one definition fetched
             # if no cleaning needed, add the whole definition
             if not clean:
                 words.append(definition)
@@ -153,9 +124,7 @@ def download_word_definition(dict_name, word, pos="all", clean=True):
         error_msg = f"Erreur pour '{original_word}' dans {dict_name_display}: {str(e)}"
         print(f"\nWARNING: Error for '{original_word}' in {dict_name_display}: {str(e)}")
         
-        if 'downloader' in locals() and downloader.language == "fr":
-            return None, "", error_msg
-        return None
+        return None, "", error_msg
 
 if __name__ == '__main__':
     print("-- TEST : definitions of wick --")
