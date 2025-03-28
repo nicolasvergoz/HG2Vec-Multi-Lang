@@ -1,0 +1,5 @@
+house
+tree
+work
+travel
+happy 

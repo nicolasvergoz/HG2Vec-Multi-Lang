@@ -22,7 +22,8 @@
 from queue import Queue
 from threading import Thread, Lock
 from multiprocessing import cpu_count
-from downloader import *
+from downloader import download_word_definition
+from dictionaries import get_language_downloaders, DictionaryDownloader
 from os.path import splitext, isfile, join, exists, basename, dirname
 import argparse
 import time
@@ -35,8 +36,9 @@ errorFlag = False  # Drapeau pour signaler les erreurs techniques
 notFoundLock = Lock()  # Lock pour la liste des mots non trouvés
 counterLock = Lock()
 errorLock = Lock()  # Lock pour la manipulation du drapeau d'erreur
-request_counter  = {"Cam": 0, "Dic": 0, "Col": 0, "Oxf": 0, "robert": 0}
-download_counter = {"Cam": 0, "Dic": 0, "Col": 0, "Oxf": 0, "robert": 0}
+# Initialiser les compteurs avec les codes courts standard
+request_counter = {}
+download_counter = {}
 not_found_words = []  # Liste pour stocker les mots non trouvés, leurs URLs et messages d'erreur
 
 class ThreadDown(Thread):
@@ -139,7 +141,7 @@ class ThreadWrite(Thread):
 def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
     # 0. to measure download time; use `global` to be able to modify exitFlag
     globalStart = time.time()
-    global exitFlag, errorFlag, not_found_words
+    global exitFlag, errorFlag, not_found_words, request_counter, download_counter
 
     # 1. read the file to get the list of words to download definitions
     vocabulary = set()
@@ -169,9 +171,17 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
     # Create filename for not found words
     not_found_fn = join(output_dir, splitext(input_filename)[0] + "-not-found-{}.txt".format(lang))
 
+    # Get the dictionary downloaders for the specified language
+    language_downloaders = get_language_downloaders(lang)
+    
+    # Initialiser les compteurs pour chaque dictionnaire
+    for downloader in language_downloaders.values():
+        request_counter[downloader.short_code] = 0
+        download_counter[downloader.short_code] = 0
+    
     # look if some definitions have already been downloaded. If that's the case,
     # add the words present in output_fn in the aleady_done variable
-    already_done = {"Cam": set(), "Dic": set(), "Col": set(), "Oxf": set(), "robert": set()}
+    already_done = {downloader.short_code: set() for downloader in language_downloaders.values()}
     reusing = False
     if isfile(output_fn): # need to read the file, first test if it exists
         with open(output_fn) as f:
@@ -180,8 +190,9 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
                 # line[0] is dictionary name, line[1] the word (already) fetched
                 if len(line) < 2:
                     continue
-                already_done[line[0]].add(line[1])
-                reusing = True
+                if line[0] in already_done:
+                    already_done[line[0]].add(line[1])
+                    reusing = True
     if reusing:
         print("\nSome definitions have already been downloaded into {}.".format(
             output_fn))
@@ -191,30 +202,16 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
                 print("  - {} definitions from {}".format(
                     len(already_done[dic]), dic))
 
-    # 2. create queues containing all words to fetch (queues depend on language)
-    # The words to download are in queue_{Cam, Dic, Col, Oxf, Robert}, the downloaded
-    # definitions are pushed in queue_msg
-    queue_Cam = Queue() if lang == "en" else None
-    queue_Dic = Queue() if lang == "en" else None
-    queue_Col = Queue() if lang == "en" else None
-    queue_Oxf = Queue() if lang == "en" else None
-    queue_Robert = Queue() if lang == "fr" else None
+    # 2. create queues containing all words to fetch based on available dictionaries
+    queues = {downloader.short_code: Queue() for downloader in language_downloaders.values()}
     queue_msg = Queue()
 
-    # only add words in queue if they are not already done and the queue exists (depends on language)
+    # only add words in queue if they are not already done
     for w in vocabulary:
-        if lang == "en":
-            if queue_Cam and not w in already_done["Cam"]:
-                queue_Cam.put(w)
-            if queue_Dic and not w in already_done["Dic"]:
-                queue_Dic.put(w)
-            if queue_Col and not w in already_done["Col"]:
-                queue_Col.put(w)
-            if queue_Oxf and not w in already_done["Oxf"]:
-                queue_Oxf.put(w)
-        elif lang == "fr":
-            if queue_Robert and not w in already_done["robert"]:
-                queue_Robert.put(w)
+        for downloader in language_downloaders.values():
+            dict_code = downloader.short_code
+            if not w in already_done[dict_code]:
+                queues[dict_code].put(w)
 
     # 3. create threads
     threads = []
@@ -225,33 +222,25 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
     # Adjust thread count based on dictionaries used
     NB_THREAD = cpu_count() * 3
     
-    # Create appropriate threads based on language
-    if lang == "en":
-        print("\nDownloading definitions from English dictionaries...")
-        for x in range(NB_THREAD):
-            if queue_Cam:
-                thread_Cam = ThreadDown("Cam", pos, queue_Cam, queue_msg)
-                thread_Cam.start()
-                threads.append(thread_Cam)
-            if queue_Dic:
-                thread_Dic = ThreadDown("Dic", pos, queue_Dic, queue_msg)
-                thread_Dic.start()
-                threads.append(thread_Dic)
-            if queue_Col:
-                thread_Col = ThreadDown("Col", pos, queue_Col, queue_msg)
-                thread_Col.start()
-                threads.append(thread_Col)
-            if queue_Oxf:
-                thread_Oxf = ThreadDown("Oxf", pos, queue_Oxf, queue_msg)
-                thread_Oxf.start()
-                threads.append(thread_Oxf)
-    elif lang == "fr":
-        print("\nDownloading definitions from Le Robert (French dictionary)...")
-        for x in range(NB_THREAD * 4):  # Use all available threads for Robert since it's the only one
-            if queue_Robert:
-                thread_Robert = ThreadDown("robert", pos, queue_Robert, queue_msg)
-                thread_Robert.start()
-                threads.append(thread_Robert)
+    # Calculate threads per dictionary
+    nb_dicts = len(language_downloaders)
+    if nb_dicts > 0:
+        threads_per_dict = max(1, NB_THREAD // nb_dicts)
+    else:
+        print(f"ERROR: No dictionaries available for language '{lang}'")
+        exitFlag = 1
+        thread_writer.join()
+        return
+    
+    # Create threads for each dictionary
+    print(f"\nDownloading definitions using {threads_per_dict} threads per dictionary...")
+    for downloader in language_downloaders.values():
+        dict_code = downloader.short_code
+        print(f"  - Using {downloader.name} dictionary (code: {dict_code})")
+        for _ in range(threads_per_dict):
+            thread = ThreadDown(dict_code, pos, queues[dict_code], queue_msg)
+            thread.start()
+            threads.append(thread)
 
     # 4. monitor threads and check for errors, show progress
     percent = 0
@@ -259,36 +248,23 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
     # Wait for threads to complete
     try:
         # Continue checking while threads are running
-        if lang == "en":
-            while (not queue_msg.empty() or
-                  (queue_Cam and not queue_Cam.empty()) or
-                  (queue_Dic and not queue_Dic.empty()) or
-                  (queue_Col and not queue_Col.empty()) or
-                  (queue_Oxf and not queue_Oxf.empty())):
-
-                # For English: 4 dictionaries
-                tmp = sum(request_counter.values()) / (4.0 * vocabulary_size) * 100
-                tmp = int(tmp) + 1
+        while True:
+            # Check if all queues are empty
+            all_queues_empty = all(q.empty() for q in queues.values()) and queue_msg.empty()
+            if all_queues_empty:
+                break
+                
+            # Calculate progress based on requests processed
+            if nb_dicts > 0:
+                total_requests = sum(request_counter[code] for code in queues.keys())
+                progress = total_requests / (nb_dicts * vocabulary_size) * 100
+                tmp = int(progress) + 1
                 if tmp != percent:
                     print('\r{0}%'.format(tmp), end="")
                     percent = tmp
-                
-                # Dormir un peu pour éviter de surcharger le CPU
-                time.sleep(0.1)
-                
-        elif lang == "fr":
-            while (not queue_msg.empty() or
-                  (queue_Robert and not queue_Robert.empty())):
-
-                # For French: 1 dictionary only
-                tmp = request_counter["robert"] / (1.0 * vocabulary_size) * 100
-                tmp = int(tmp) + 1
-                if tmp != percent:
-                    print('\r{0}%'.format(tmp), end="")
-                    percent = tmp
-                    
-                # Dormir un peu pour éviter de surcharger le CPU
-                time.sleep(0.1)
+            
+            # Dormir un peu pour éviter de surcharger le CPU
+            time.sleep(0.1)
             
     except KeyboardInterrupt:
         print("\nKeyboard interrupt detected. Stopping all threads...")
@@ -336,19 +312,15 @@ def main(filename, pos="all", lang="en", output_dir="data/output/definitions"):
     print("S T A T S (# successful download / # requests)")
     print("==============================================")
     
-    # Only show statistics for dictionaries used in the current language
-    if lang == "en":
-        relevant_dicts = ["Cam", "Dic", "Col", "Oxf"]
-    else:
-        relevant_dicts = ["robert"]
-        
-    for dic in sorted(request_counter.keys()):
-        if dic in relevant_dicts and request_counter[dic] > 0:
+    # Only show statistics for dictionaries used
+    for downloader in language_downloaders.values():
+        dict_code = downloader.short_code
+        if request_counter[dict_code] > 0:
             print("{}   {}/{}".format(
-                    dic, download_counter[dic], request_counter[dic]),
+                    dict_code, download_counter[dict_code], request_counter[dict_code]),
                     end="")
             print("  ({:.1f}%)".format(
-                download_counter[dic] * 100 / request_counter[dic]))
+                download_counter[dict_code] * 100 / request_counter[dict_code]))
 
     print("\n-> Results written in", output_fn)
 
@@ -362,8 +334,7 @@ if __name__ == '__main__':
         corresponds to that POS, not the other ones. By default, it downloads
         the definitions for all POS""", type=str.lower, default="all")
     parser.add_argument("-lang", help="""Either EN (English) or FR (French). Determines
-        which dictionaries to use. EN uses Cambridge, Dictionary.com, Collins, and
-        Oxford. FR uses only Le Robert.""", type=str.lower, default="en")
+        which dictionaries to use. EN uses Cambridge, Dictionary.com, and Collins. FR uses only Le Robert.""", type=str.lower, default="en")
     parser.add_argument("-out", "--output_dir", help="""Output directory for definition files.
         Default is 'data/output/definitions'""", 
         default="data/output/definitions")
