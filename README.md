@@ -19,3 +19,7 @@ pip install -e .
 # Install development dependencies
 pip install -e ".[dev]"
 ``` 
+
+# Possible improvments
+- French Larousse: Do not concatenate composed words like "moi-même" into "moimeme", it should be "moi-meme"
+- Vector file for composed words might have wrong dimension count since it should be "word vec1 vec2" etc. but composed words are "moi-même" maybe it's a problem
