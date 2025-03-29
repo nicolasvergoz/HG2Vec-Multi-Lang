@@ -140,6 +140,7 @@ class ThreadWrite(Thread):
         Thread.__init__(self)
         self.msg_queue = msg_queue
         self.of = open(filename, "a")
+        self.counter = 0  # Counter to track number of definitions written
 
     def run(self):
         global exitFlag
@@ -147,15 +148,30 @@ class ThreadWrite(Thread):
             if not self.msg_queue.empty():
                 msg = self.msg_queue.get()
                 self.of.write(msg + "\n")
+                self.counter += 1
+                
+                # Flush the file every 100 definitions
+                if self.counter % 100 == 0:
+                    self.of.flush()
+                    print(f"\r{self.counter} definitions written to file", end="")
 
         # Empty the queue before terminating
         while True:
             try:
                 msg = self.msg_queue.get(True, 5)
                 self.of.write(msg + "\n")
+                self.counter += 1
+                
+                # Flush one last time if needed
+                if self.counter % 100 == 0:
+                    self.of.flush()
+                    print(f"\r{self.counter} definitions written to file", end="")
             except:
                 break
 
+        # Final flush to ensure all data is written
+        self.of.flush()
+        print(f"\nTotal: {self.counter} definitions written to file")
         self.of.close()
 
 def main(filename, pos="all", lang="en", output_dir="data/output/definitions", min_word_length=1, use_stopwords=True, stopwords_file=None, max_iterations=1, max_definitions=None, ignore_warnings=False):
