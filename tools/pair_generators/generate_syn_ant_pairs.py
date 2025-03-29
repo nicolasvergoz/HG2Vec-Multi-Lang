@@ -142,12 +142,12 @@ def generate_pairs(vocabulary_fn: str, wiktionary_fn: str) -> Tuple[int, int]:
                     
                     # Write synonym pairs
                     for synonym in synonyms:
-                        syn_file.write(f"{word}\t{synonym}\n")
+                        syn_file.write(f"{word} {synonym}\n")
                         synonym_count += 1
                     
                     # Write antonym pairs
                     for antonym in antonyms:
-                        ant_file.write(f"{word}\t{antonym}\n")
+                        ant_file.write(f"{word} {antonym}\n")
                         antonym_count += 1
             
             except json.JSONDecodeError:

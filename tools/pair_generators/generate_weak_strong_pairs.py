@@ -237,8 +237,8 @@ def generate_pairs(definition_fn, embedding_fn, strg_fn, weak_fn, K):
             uniq_words.update(set(ar[1:]))
 
     print("Done.")
-    print("   Entries in \"{}\":\t{}".format(definition_fn, len(dictionary)))
-    print("   Uniq words in \"{}\":\t{}".format(definition_fn, len(uniq_words)))
+    print("   Entries in \"{}\": {}".format(definition_fn, len(dictionary)))
+    print("   Uniq words in \"{}\": {}".format(definition_fn, len(uniq_words)))
 
     # Load embedding only if K > 0 (for artificial strong pairs)
     embedding, numToWords, wordsToNum = None, {}, {}
