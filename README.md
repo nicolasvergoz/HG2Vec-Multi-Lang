@@ -24,13 +24,6 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -e .
 ```
 
-## Development
-
-```bash
-# Install development dependencies
-pip install -e ".[dev]"
-```
-
 ## Usage Pipeline
 
 Follow these steps in order to run the complete pipeline:
