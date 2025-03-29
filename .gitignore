@@ -80,7 +80,20 @@ dmypy.json
 # Logs
 *.log 
 
-data/output/*
-data/temp/*
+# Ignore all files in data/output and subdirectories
+data/output/**/*
+# But keep the directories themselves
+!data/output/
+!data/output/*/
+!data/output/*/*/
+!data/output/*/*/*/
+
+# Ignore all files in data/output and subdirectories
+data/temp/**/*
+# But keep the directories themselves
+!data/temp/
+!data/temp/*/
+!data/temp/*/*/
+!data/temp/*/*/*/
 *.vec
 wiktionary_fr.jsonl
